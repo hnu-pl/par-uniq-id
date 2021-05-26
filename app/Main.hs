@@ -3,11 +3,15 @@ module Main where
 
 import Lib
 
+import Control.Concurrent.MVar.Strict
+
 import Control.Parallel.Strategies
 import Control.Monad.Trans.State.Strict
 import Control.Monad
 import Data.List
 import System.Environment
+
+import qualified Control.Monad.Parallel as MP
 
 qsort [] = []
 qsort [y] = [y]
@@ -34,6 +38,7 @@ data Expr
 
 -- main = print example1
 
+
 example1 = runParallel
     [ sequence [newId]
     , sequence [newId, newId, newId]
@@ -43,23 +48,49 @@ example1 = runParallel
 -- >>> runParallel (sequence <$> [ [newId], [newId, newId, newId], [newId, newId] ]) `runState` (0,1)
 -- ([[0],[1,4,7],[2,5]],(10,1))
 
-bench n m = flip runState (0,1) . runParallel $
+bench1 n m = flip runState (0,1) . runParallel $
     replicate n (foldl1 (>>) $ replicate m newId)
 
 main = do
-    a0:a1:_ <- getArgs
-    let n = read a0 :: Int
-        m = read a1 :: Int
-    putStrLn $ " bench "++show n++" "++show m
-    print $ bench n m 
+    a0:a1:a2:_ <- getArgs
+    let k = read a0 :: Int
+        n = read a1 :: Int
+        m = read a2 :: Int
+    case k of
+        1 -> do
+            putStrLn $ " bench1 "++show n++" "++show m
+            print $ bench1 n m 
+        2 -> do
+            putStrLn $ " bench2 "++show n++" "++show m
+            print =<< bench2 n m 
+
+
+newIdMVar :: MVar Int -> IO Int
+newIdMVar c = modifyMVar c (\n -> return (n+1,n))
+
+bench2 n m = do
+    c <- newMVar (0 :: Int)
+    let new = newIdMVar c
+    print . maximum =<< MP.replicateM n (foldl1 (>>) $ replicate m new)
 
 {-
-stack run -- 8 2000000 +RTS -s -N1
-stack run -- 8 2000000 +RTS -s -N2
-stack run -- 8 2000000 +RTS -s -N3
-stack run -- 8 2000000 +RTS -s -N4
-stack run -- 8 2000000 +RTS -s -N5
-stack run -- 8 2000000 +RTS -s -N6
-stack run -- 8 2000000 +RTS -s -N7
-stack run -- 8 2000000 +RTS -s -N8
+stack run -- 1 8 2000000 +RTS -s -N1
+stack run -- 1 8 2000000 +RTS -s -N2
+stack run -- 1 8 2000000 +RTS -s -N3
+stack run -- 1 8 2000000 +RTS -s -N4
+stack run -- 1 8 2000000 +RTS -s -N5
+stack run -- 1 8 2000000 +RTS -s -N6
+stack run -- 1 8 2000000 +RTS -s -N7
+stack run -- 1 8 2000000 +RTS -s -N8
+-}
+
+{-
+stack run -- 2 8 100000 +RTS -s -N1
+stack run -- 2 8 100000 +RTS -s -N2
+stack run -- 2 8 100000 +RTS -s -N3
+stack run -- 2 8 100000 +RTS -s -N4
+stack run -- 2 8 100000 +RTS -s -N5
+stack run -- 2 8 100000 +RTS -s -N6
+stack run -- 2 8 100000 +RTS -s -N7
+stack run -- 2 8 100000 +RTS -s -N8
 -}
