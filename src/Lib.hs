@@ -18,7 +18,7 @@ runParallel ms = do
               `using` parList rpar
     let (as,ss) = unzip ps
     put (maximum (map fst ss), i)
-    return as
+    return (as `using` parList rseq)
 
 runParallelT :: Monad m => (m (a,(Int,Int)) -> (a,(Int,Int))) ->
     [StateT (Int, Int) m a] -> StateT (Int, Int) m [a]
