@@ -1,2 +1,4 @@
 .stack-work/
 *~
+par-uniq-id.cabal
+stack.yaml.lock
