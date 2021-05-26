@@ -6,6 +6,8 @@ import Lib
 import Control.Parallel.Strategies
 -- import Data.List
 import Control.Monad.Trans.State.Strict
+import Control.Monad
+import Data.Functor.Identity
 
 qsort [] = []
 qsort [y] = [y]
@@ -32,6 +34,7 @@ data Expr
 newId :: Monad m => StateT (Int, Int) m Int
 newId = do { (k,i) <- get; put (k+i,i); return k }
 
+runParallel :: [State (Int, Int) a] -> State (Int, Int) [a]
 runParallel ms = do
     (k,i) <- get
     let n = length ms
@@ -40,15 +43,17 @@ runParallel ms = do
     let (as,ss) = unzip ps
     put (maximum (map fst ss), i)
     return as
- 
-{-
-  do ...
-     [r1,,r2,k3] <- runParallel [t1, t2, t3]
-     -- [(k1,r1),(k2,r2),(k3,r3)] <- runParallel' [t1, t2, t3]
-     -- [r1,k2,,r3] <- runParallel' [t1, t2, t3]
-        상태를 max[k1,k2,k3]+1 세팅을 해주면
-     ...
--}
+
+runParallelT :: Monad m => (m (a,(Int,Int)) -> (a,(Int,Int))) ->
+    [StateT (Int, Int) m a] -> StateT (Int, Int) m [a]
+runParallelT runM ms = do
+    (k,i) <- get
+    let n = length ms
+    let ps = zipWith ($) [runM . flip runStateT (k+r,i*n) | r<-[0..n-1]] ms
+              `using` parList rpar
+    let (as,ss) = unzip ps
+    put (maximum (map fst ss), i)
+    return as
 
 main = print $ runParallel
     [ sequence [newId]
@@ -57,4 +62,4 @@ main = print $ runParallel
     ] `runState` (0,1)
 
 -- >>> runParallel (sequence <$> [ [newId], [newId, newId, newId], [newId, newId] ]) `runState` (0,1)
--- ([[0],[1,4,7],[2,5]],(10,1))
+-- ([[0],[1,4,7],[2,5]],(11,1))
