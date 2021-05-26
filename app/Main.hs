@@ -62,4 +62,4 @@ main = print $ runParallel
     ] `runState` (0,1)
 
 -- >>> runParallel (sequence <$> [ [newId], [newId, newId, newId], [newId, newId] ]) `runState` (0,1)
--- ([[0],[1,4,7],[2,5]],(11,1))
+-- ([[0],[1,4,7],[2,5]],(10,1))
