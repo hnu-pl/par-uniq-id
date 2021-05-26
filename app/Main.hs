@@ -50,3 +50,12 @@ runParListWithId ms = zipWith (>>) fs ms `using` parList rpar
     where
       fs = [ modify (\(k,i) -> (k+r,i*n)) | r <- [0..n-1] ] 
       n = length ms
+
+{-
+  do ...
+     [r1,,r2,k3] <- runParallel [t1, t2, t3]
+     -- [(k1,r1),(k2,r2),(k3,r3)] <- runParallel' [t1, t2, t3]
+     -- [r1,k2,,r3] <- runParallel' [t1, t2, t3]
+        상태를 max[k1,k2,k3]+1 세팅을 해주면
+     ...
+-}
