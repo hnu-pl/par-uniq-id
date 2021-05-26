@@ -37,8 +37,9 @@ runParallel ms = do
     let n = length ms
     let ps = zipWith ($) [flip runState (k+r,i*n) | r<-[0..n-1]] ms
               `using` parList rpar
-    put (1 + maximum (map (fst . snd) ps), i)
-    return $ map fst ps
+    let (as,ss) = unzip ps
+    put (maximum (map fst ss), i)
+    return as
  
 {-
   do ...
@@ -53,5 +54,7 @@ main = print $ runParallel
     [ sequence [newId]
     , sequence [newId, newId, newId]
     , sequence [newId, newId]
-    , sequence [newId, newId, newId, newId]
     ] `runState` (0,1)
+
+-- >>> runParallel (sequence <$> [ [newId], [newId, newId, newId], [newId, newId] ]) `runState` (0,1)
+-- ([[0],[1,4,7],[2,5]],(10,1))
