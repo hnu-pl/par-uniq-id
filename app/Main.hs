@@ -56,9 +56,9 @@ runParallelT runM ms = do
     return as
 
 main = print $ runParallel
-    [ sequence [newId]
+    [ sequence [newId, newId]
+    , sequence [newId, newId, newId, newId]
     , sequence [newId, newId, newId]
-    , sequence [newId, newId]
     ] `runState` (0,1)
 
 -- >>> runParallel (sequence <$> [ [newId], [newId, newId, newId], [newId, newId] ]) `runState` (0,1)
