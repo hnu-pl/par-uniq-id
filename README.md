@@ -27,7 +27,7 @@
 개수를 신경쓰지 않고 Lock 없이 여러 병렬 작업에 고유 식별자를 할당하는 방법을
 제안하고 구현하여 Lock을 활용한 방식과 성능을 비교하는 간단한 벤치마크를 수행하였다.
 
-방법
+## 방법
 
 k를 1씩 증가 그러니까 이번엔 k를 사용하고 다음번에는 (k+1,1) 이런 식으로 진행
 (k,1)
@@ -43,9 +43,9 @@ k를 1씩 증가 그러니까 이번엔 k를 사용하고 다음번에는 (k+1,1
 (k,i*n), (k+1,i*n), ..., (k+n-1,i*n)
 
 
-구현 및 벤치마크
+[![](https://mermaid.ink/img/eyJjb2RlIjoic3RhdGVEaWFncmFtLXYyXG4gICAgXG5zdGF0ZSBmb3JrIDw8Zm9yaz4-XG5SOiDii65cXG4oay0yLCAxKVxcbihrLTEsIDEpXFxuKGsgLCAxKVxuUzA6IChrKzAsIDMpXFxuKGsrMywgMylcXG4g4ouuXFxuKHggLCAzKVxuUzE6IChrKzEsIDMpXFxuKGsrNCwgMylcXG7ii65cXG4oeSAsIDMpXG5TMjogKGsrMiwgMylcXG4oays1LCAzKVxcbuKLrlxcbih6ICwgMylcblQ6IChtYXgoeCx5LHopLCAxKVxcbihtYXgoeCx5LHopKzEsIDEpXFxuKG1heCh4LHkseikrMiwgMSlcXG7ii65cXG5cblxuUiAtLT4gZm9ya1xuZm9yayAtLT4gUzBcbmZvcmsgLS0-IFMxXG5mb3JrIC0tPiBTMlxuXG5zdGF0ZSBqb2luIDw8am9pbj4-XG5TMCAtLT4gam9pblxuUzEgLS0-IGpvaW5cblMyIC0tPiBqb2luXG5qb2luIC0tPiBUXG5cbiIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0In0sInVwZGF0ZUVkaXRvciI6ZmFsc2V9)](https://mermaid-js.github.io/mermaid-live-editor/#/edit/eyJjb2RlIjoic3RhdGVEaWFncmFtLXYyXG4gICAgXG5zdGF0ZSBmb3JrIDw8Zm9yaz4-XG5SOiDii65cXG4oay0yLCAxKVxcbihrLTEsIDEpXFxuKGsgLCAxKVxuUzA6IChrKzAsIDMpXFxuKGsrMywgMylcXG4g4ouuXFxuKHggLCAzKVxuUzE6IChrKzEsIDMpXFxuKGsrNCwgMylcXG7ii65cXG4oeSAsIDMpXG5TMjogKGsrMiwgMylcXG4oays1LCAzKVxcbuKLrlxcbih6ICwgMylcblQ6IChtYXgoeCx5LHopLCAxKVxcbihtYXgoeCx5LHopKzEsIDEpXFxuKG1heCh4LHkseikrMiwgMSlcXG7ii65cXG5cblxuUiAtLT4gZm9ya1xuZm9yayAtLT4gUzBcbmZvcmsgLS0-IFMxXG5mb3JrIC0tPiBTMlxuXG5zdGF0ZSBqb2luIDw8am9pbj4-XG5TMCAtLT4gam9pblxuUzEgLS0-IGpvaW5cblMyIC0tPiBqb2luXG5qb2luIC0tPiBUXG5cbiIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0In0sInVwZGF0ZUVkaXRvciI6ZmFsc2V9)
 
-
+## 구현 및 벤치마크
 
 ## 결론
 나머지 연산(modular arithmetic)을 활용한 고유 식별자를 할당 방식은 
