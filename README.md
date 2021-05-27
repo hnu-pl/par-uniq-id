@@ -40,10 +40,45 @@ k를 1씩 증가 그러니까 이번엔 k를 사용하고 다음번에는 (k+1,1
 (k,i)
 
 이러다 n개로 나눠서 돌리면
-(k,i*n), (k+1,i*n), ..., (k+n-1,i*n)
+`(k,i*n), (k+1,i*n), ..., (k+n-1,i*n)`
 
-
+### 그림1. 1씩 증가하는 흐름을 3개의 작업으로 분기하여 병렬 실행 후 다시 합쳐 진행하는 `runParallel`의 동작 방식
 [![](https://mermaid.ink/img/eyJjb2RlIjoic3RhdGVEaWFncmFtLXYyXG4gICAgXG5zdGF0ZSBmb3JrIDw8Zm9yaz4-XG5SOiDii65cXG4oay0yLCAxKVxcbihrLTEsIDEpXFxuKGsgLCAxKVxuUzA6IChrKzAsIDMpXFxuKGsrMywgMylcXG4g4ouuXFxuKHggLCAzKVxuUzE6IChrKzEsIDMpXFxuKGsrNCwgMylcXG7ii65cXG4oeSAsIDMpXG5TMjogKGsrMiwgMylcXG4oays1LCAzKVxcbuKLrlxcbih6ICwgMylcblQ6IChtYXgoeCx5LHopLCAxKVxcbihtYXgoeCx5LHopKzEsIDEpXFxuKG1heCh4LHkseikrMiwgMSlcXG7ii65cXG5cblxuUiAtLT4gZm9ya1xuZm9yayAtLT4gUzBcbmZvcmsgLS0-IFMxXG5mb3JrIC0tPiBTMlxuXG5zdGF0ZSBqb2luIDw8am9pbj4-XG5TMCAtLT4gam9pblxuUzEgLS0-IGpvaW5cblMyIC0tPiBqb2luXG5qb2luIC0tPiBUXG5cbiIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0In0sInVwZGF0ZUVkaXRvciI6ZmFsc2V9)](https://mermaid-js.github.io/mermaid-live-editor/#/edit/eyJjb2RlIjoic3RhdGVEaWFncmFtLXYyXG4gICAgXG5zdGF0ZSBmb3JrIDw8Zm9yaz4-XG5SOiDii65cXG4oay0yLCAxKVxcbihrLTEsIDEpXFxuKGsgLCAxKVxuUzA6IChrKzAsIDMpXFxuKGsrMywgMylcXG4g4ouuXFxuKHggLCAzKVxuUzE6IChrKzEsIDMpXFxuKGsrNCwgMylcXG7ii65cXG4oeSAsIDMpXG5TMjogKGsrMiwgMylcXG4oays1LCAzKVxcbuKLrlxcbih6ICwgMylcblQ6IChtYXgoeCx5LHopLCAxKVxcbihtYXgoeCx5LHopKzEsIDEpXFxuKG1heCh4LHkseikrMiwgMSlcXG7ii65cXG5cblxuUiAtLT4gZm9ya1xuZm9yayAtLT4gUzBcbmZvcmsgLS0-IFMxXG5mb3JrIC0tPiBTMlxuXG5zdGF0ZSBqb2luIDw8am9pbj4-XG5TMCAtLT4gam9pblxuUzEgLS0-IGpvaW5cblMyIC0tPiBqb2luXG5qb2luIC0tPiBUXG5cbiIsIm1lcm1haWQiOnsidGhlbWUiOiJkZWZhdWx0In0sInVwZGF0ZUVkaXRvciI6ZmFsc2V9)
+
+### 그림2. Lock-Free 고유 식별자 할당 라이브러리 기반 병렬화 벤치마크
+이걸 실행한 걸 그래프 차트로 그림으로 만들어주세요. `-N`다음에 최대 병렬 스레드 활용 개수랑 실행 시간 비교 그래프로요 
+
+Total time에 다음에 괄호 안에 있는 게 실제 걸린 시간입니다.
+
+연구실 제 컴에서는 첫번째 줄 실행한 게 3~4초대 걸리고 조금씩 줄어들어서 2초대 정도로 가는데
+
+돌리는 컴퓨터 상황에 따라서 2000000 대신에 개수는 조금 조정해도 되고요 한번 돌리는 데 너무 오래 걸리거나 그러면
+
+
+```
+stack run -- 1 8 2000000 +RTS -s -N1
+stack run -- 1 8 2000000 +RTS -s -N2
+stack run -- 1 8 2000000 +RTS -s -N3
+stack run -- 1 8 2000000 +RTS -s -N4
+stack run -- 1 8 2000000 +RTS -s -N5
+stack run -- 1 8 2000000 +RTS -s -N6
+stack run -- 1 8 2000000 +RTS -s -N7
+stack run -- 1 8 2000000 +RTS -s -N8
+```
+
+### 그림3. Lock 활용 공유 메모리 기반 고유 식별자 항당 병렬화 벤치마크
+마찬가지로 3번도 그래프 차트 만들어 주세요. 마찬가지로 컴퓨터 상황에 따라 100000 를 조금 조정해도 되고.
+
+```
+stack run -- 2 8 100000 +RTS -s -N1
+stack run -- 2 8 100000 +RTS -s -N2
+stack run -- 2 8 100000 +RTS -s -N3
+stack run -- 2 8 100000 +RTS -s -N4
+stack run -- 2 8 100000 +RTS -s -N5
+stack run -- 2 8 100000 +RTS -s -N6
+stack run -- 2 8 100000 +RTS -s -N7
+stack run -- 2 8 100000 +RTS -s -N8
+```
 
 ## 구현 및 벤치마크
 
