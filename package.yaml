@@ -24,7 +24,14 @@ dependencies:
 - parallel
 - monad-parallel
 - strict-concurrency
+- mtl
 - transformers
+- transformers-compat
+- profunctors
+- deepseq
+- containers
+- exceptions
+- template-haskell
 
 library:
   source-dirs: src
