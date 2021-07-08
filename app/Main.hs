@@ -38,13 +38,19 @@ data Expr
     | Lam Nm Expr   --  x y = ...
     | LetS Nm [Nm] Expr  -- letS F ?x ?y = ...
     deriving Show
-    -- TODO Unbound 기반으로 바꿔야 함 ...
+    -- TODO Unbound 기반으로 바꿔야 할지도
 
-eval :: Expr -> Int
-eval _ = undefined
 
-expand :: Expr -> Expr
-expand _ = undefined
+type Env a = [(Nm,a)]
+
+data Val = Vi Int | Cl (Env Val) Expr
+
+eval :: Env Val -> Expr -> Val
+eval _ _ = undefined
+
+-- data ValS = Ve Expr | Clo (Env ValS) Expr
+-- expand :: Env ValS Expr -> ValS Expr
+expand _ _ = undefined
 
 {-
 let a = 10
