@@ -55,7 +55,7 @@ type Val = Sem Int
 eval :: Env Val -> Expr -> Sem Int
 eval _ _ = undefined
 
-type ValS = Sem Expr
+-- type ValS = Sem Expr
 -- expand :: Env ValS -> ValS Expr
 -- expand _ _ = undefined
 
