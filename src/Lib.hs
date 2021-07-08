@@ -29,7 +29,6 @@ bench1 = runFreshM $ runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), f
 
 
 
-{-
 newId :: Monad m => StateT (Int, Int) m Int
 newId = do { (k,i) <- get; put (k+i,i); return k }
 
@@ -53,5 +52,3 @@ runParallelT runM ms = do
     let (as,ss) = unzip ps
     put (maximum (map fst ss), i)
     return as
-
--}
