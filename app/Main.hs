@@ -13,6 +13,8 @@ import System.Environment
 
 import qualified Control.Monad.Parallel as MP
 
+import Unbound.Generics.LocallyNameless
+
 qsort [] = []
 qsort [y] = [y]
 qsort (y:ys) = xs ++ y : zs
@@ -30,27 +32,32 @@ main = do
 
 type Nm = String
 data Expr
-    = Const Int
-    | Plus Expr Expr
-    | If Expr Expr Expr
-    | VarE Nm --  x
-    | VarS Nm -- ?x
-    | Lam Nm Expr   --  x y = ...
-    | LetS Nm [Nm] Expr  -- letS F ?x ?y = ...
+    = Const Int          -- n
+    | Plus Expr Expr     -- e + e
+    | Less Expr Expr     -- e < e
+    | If Expr Expr Expr  -- if e e1 e0
+    | App Expr Expr      -- e e
+    | Var Nm             -- x
+    | Lam Nm Expr        -- \x.e
+    | VarS Nm            -- ?x
+    | LamS Nm Expr       -- \?x.e
+    | AppS Expr Expr     -- e e
+    | LetS Nm Expr Expr  -- letS f = \?x.\?y. ... in e
     deriving Show
     -- TODO Unbound 기반으로 바꿔야 할지도
 
 
 type Env a = [(Nm,a)]
+data Sem v = Val v | Cl (Env (Sem v)) Expr
 
-data Val = Vi Int | Cl (Env Val) Expr
+type Val = Sem Int
 
-eval :: Env Val -> Expr -> Val
+eval :: Env Val -> Expr -> Sem Int
 eval _ _ = undefined
 
--- data ValS = Ve Expr | Clo (Env ValS) Expr
--- expand :: Env ValS Expr -> ValS Expr
-expand _ _ = undefined
+type ValS = Sem Expr
+-- expand :: Env ValS -> ValS Expr
+-- expand _ _ = undefined
 
 {-
 let a = 10
