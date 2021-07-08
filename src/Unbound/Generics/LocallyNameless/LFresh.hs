@@ -137,7 +137,7 @@ instance Monad m => LFresh (LFreshMT m) where
     let s = name2String nm
     used <- ask
     return $ head (filter (\x -> not (S.member (AnyName x) used))
-                          (map (makeName s) [0..]))
+                          (map (makeName s) [0..])) -- TODO
   avoid names = LFreshMT . local (S.union (S.fromList names)) . unLFreshMT
 
   getAvoids = LFreshMT ask

@@ -30,15 +30,42 @@ main = do
 
 type Nm = String
 data Expr
-    = Var Nm
-    | Lam Nm Expr
-    | App Expr Expr
+    = Const Int
+    | Plus Expr Expr
+    | If Expr Expr Expr
+    | VarE Nm --  x
+    | VarS Nm -- ?x
+    | Lam Nm Expr   --  x y = ...
+    | LetS Nm [Nm] Expr  -- letS F ?x ?y = ...
     deriving Show
 
+eval :: Expr -> Int
+eval _ = undefined
+
+expand :: Expr -> Expr
+expand _ = undefined
+
+{-
+let a = 10
+let b = 7 
+letS F ?x ?y =
+       let a = ?x * 2 in
+       let b = ?y * 3 in
+       a + b   ## 의도는 F ?x ?y 는 대략 ?x*2 + ?y*3
+in F b a
+
+===> let a = b * 2 in
+     let b = a * 3
+-}
+
+
+main = do
+    print bench1
+    print bench1
 
 -- main = print example1
 
-
+{-
 example1 = runParallel
     [ sequence [newId]
     , sequence [newId, newId, newId]
@@ -93,4 +120,6 @@ stack run -- 2 8 100000 +RTS -s -N5
 stack run -- 2 8 100000 +RTS -s -N6
 stack run -- 2 8 100000 +RTS -s -N7
 stack run -- 2 8 100000 +RTS -s -N8
+-}
+
 -}

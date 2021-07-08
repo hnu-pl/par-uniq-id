@@ -57,7 +57,7 @@ class Monad m => Fresh m where
 -- | The @FreshM@ monad transformer.  Keeps track of the lowest index
 --   still globally unused, and increments the index every time it is
 --   asked for a fresh name.
-newtype FreshMT m a = FreshMT { unFreshMT :: St.StateT Integer m a }
+newtype FreshMT m a = FreshMT { unFreshMT :: St.StateT (Integer,Integer) m a }
   deriving
     ( Functor
     , Applicative
@@ -77,11 +77,11 @@ deriving instance Fail.MonadFail m => Fail.MonadFail (FreshMT m)
 
 -- | Run a 'FreshMT' computation (with the global index starting at zero).
 runFreshMT :: Monad m => FreshMT m a -> m a
-runFreshMT m = contFreshMT m 0
+runFreshMT m = contFreshMT m (0,1)
 
 -- | Run a 'FreshMT' computation given a starting index for fresh name
 --   generation.
-contFreshMT :: Monad m => FreshMT m a -> Integer -> m a
+contFreshMT :: Monad m => FreshMT m a -> (Integer,Integer) -> m a
 contFreshMT (FreshMT m) = St.evalStateT m
 
 instance MonadTrans FreshMT where
@@ -110,8 +110,8 @@ instance WC.MonadWriter w m => WC.MonadWriter w (FreshMT m) where
 
 instance Monad m => Fresh (FreshMT m) where
   fresh (Fn s _) = FreshMT $ do
-    n <- St.get
-    St.put $! n + 1
+    (n, k) <- St.get
+    St.put $! (n + k, k) -- TODO (,)만 srict   안에 있는 n+k는 보장이 안됨
     return $ (Fn s n)
   fresh nm@(Bn {}) = return nm
 
@@ -152,5 +152,5 @@ runFreshM :: FreshM a -> a
 runFreshM = runIdentity . runFreshMT
 
 -- | Run a FreshM computation given a starting index.
-contFreshM :: FreshM a -> Integer -> a
+contFreshM :: FreshM a -> (Integer,Integer) -> a
 contFreshM m = runIdentity . contFreshMT m
