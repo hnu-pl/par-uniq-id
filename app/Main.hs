@@ -49,11 +49,38 @@ data Expr
 
 type Env a = [(Nm,a)]
 data Sem v = Val v | Cl (Env (Sem v)) Expr
+    deriving Show
 
 type Val = Sem Int
 
+
+lookup' x env = v where Just v = lookup x env
+
 eval :: Env Val -> Expr -> Sem Int
-eval _ _ = undefined
+eval env (Const i)     = Val i
+eval env (Plus e1 e2)  = 
+    case (eval env e1 , eval env e2) of
+        (Val n1, Val n2)     -> Val (n1+n2)
+        (_ , _)              -> error ""
+eval env (Less e1 e2)  = 
+    case (eval env e1 , eval env e2) of
+        (Val n1, Val n2)     -> if n1<n2 then Val 0 else Val 1
+        (_ , _)              -> error ""
+eval env (If e1 e2 e3) = 
+    case (eval env e1) of
+        (Val 0)              -> eval env e2
+        (Val _)              -> eval env e3
+        (_)                  -> error ""
+eval env (App e1 e2)   = eval ((x,e2'):env1) e
+    where 
+        Cl env1 (Lam x e)    = eval env e1
+        e2'                  = eval env e2
+eval env (Var x)       = lookup' x env
+eval env v@(Lam x e)   = Cl env v
+eval env (VarS x)      = undefined 
+eval env v@(LamS x e)  = undefined
+eval env (AppS e1 e2)  = undefined
+eval env (LetS x e1 e2)= undefined
 
 -- type ValS = Sem Expr
 -- expand :: Env ValS -> ValS Expr
@@ -72,9 +99,7 @@ in F b a
      let b = a * 3
 -}
 
-
 main = do
-    print bench1
     print bench1
 
 -- main = print example1
