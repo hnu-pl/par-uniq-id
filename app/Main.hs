@@ -97,9 +97,7 @@ in F b a
      let b = a * 3
 -}
 
-
 main = do
-    print bench1
     print bench1
 
 -- main = print example1
