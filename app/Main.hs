@@ -41,19 +41,24 @@ data Expr
     | If Expr Expr Expr                  -- if e e1 e0
     | Lam (Bind Nm Expr)                 -- \x.e
     | App Expr Expr                      -- e e
-    | VarS Nm                            -- ?x
     | LamS (Bind Nm Expr)                -- \?x.e
     | LetS (Bind (Nm, Embed Expr) Expr)  -- letS f = \?x.\?y. ... in e
     deriving (Show, Generic, Typeable)
     -- TODO Unbound 기반으로 바꿔야 할지도
 
 instance Alpha Expr
+instance Subst Expr Expr where
+  isvar (Var  x) = Just (SubstName x)
+  isvar _     = Nothing
 
 type SEnv = [(Nm,Expr)]
 
 expand :: Fresh m => SEnv -> Expr -> m Expr
 expand _   e@(Const n)   = return e
-expand _   e@(Var x)     = return e
+expand env e@(Var x)     =
+    case lookup x env of
+        Just e1 -> return e1
+        Nothing -> return e 
 expand env (Plus e1 e2)  = do -- TODO constant folding?
     e1' <- expand env e1
     e2' <- expand env e2
@@ -75,15 +80,36 @@ expand env (App e1 e2)   = do
     e1' <- expand env e1
     e2' <- expand env e2
     case e1' of
-        LamS b -> undefined -- 매크로 확장
+        LamS b -> do (x,e) <- unbind b
+                     return $ subst x e2' e
         e1'    -> return $ App e1' e2'
-expand env (VarS x)      =
-    case lookup x env of
-        Just s  -> return s
-        Nothing -> error "TODO VarS x error message"
-expand env e@(LamS b) = return e
-expand _ (LetS b) = undefined -- 매크로 정의
+expand env e@(LamS b) = do
+    (x,e) <- unbind b
+    e' <- expand env e
+    return $ LamS (bind x e')
+expand env (LetS b) = do
+    ((f,Embed e1), e) <- unbind b -- letS f = e1 in e
+    e1' <- expand env e1
+    expand ((f,e1'):env) e
 
+lamS x = LamS . bind x
+
+e99 = LetS . bind (gt, embed (lamS x . lamS y $ Less _y _x)) $
+      LetS . bind (eq, embed (lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) (Const 1))) $
+      App (App (Var eq) (Const 4)) (Const 3)
+    where
+        gt = s2n "gt"
+        eq = s2n "eq"
+        x = s2n "?x"
+        y = s2n "?y"
+        _gt a b = App (Var gt) a `App` b
+        _eq a b = App (Var eq) a `App` b
+        _x = Var x
+        _y = Var y
+
+-- >>> runFreshM (expand [] e99)
+-- Less (Plus (Less (Const 4) (Const 3)) (Less (Const 3) (Const 4))) (Const 1)
+    
 {-
 let a = 10
 let b = 7 
