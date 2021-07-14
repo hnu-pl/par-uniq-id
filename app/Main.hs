@@ -51,7 +51,7 @@ instance Alpha Expr
 
 type SEnv = [(Nm,Expr)]
 
-expand :: (MonadFail m, Fresh m) => SEnv -> Expr -> m Expr
+expand :: Fresh m => SEnv -> Expr -> m Expr
 expand _   e@(Const n)   = return e
 expand _   e@(Var x)     = return e
 expand env (Plus e1 e2)  = do -- TODO constant folding?
