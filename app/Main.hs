@@ -1,4 +1,4 @@
-{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE NoMonomorphismRestriction, DeriveGeneric, MultiParamTypeClasses #-}
 module Main where
 
 import Lib
@@ -13,6 +13,8 @@ import System.Environment
 
 import qualified Control.Monad.Parallel as MP
 
+import GHC.Generics
+import Data.Typeable
 import Unbound.Generics.LocallyNameless
 
 qsort [] = []
@@ -30,34 +32,57 @@ main = do
     case x == x of True -> return ()
 -}
 
-type Nm = String
+type Nm = Name Expr
 data Expr
-    = Const Int          -- n
-    | Plus Expr Expr     -- e + e
-    | Less Expr Expr     -- e < e
-    | If Expr Expr Expr  -- if e e1 e0
-    | App Expr Expr      -- e e
-    | Var Nm             -- x
-    | Lam Nm Expr        -- \x.e
-    | VarS Nm            -- ?x
-    | LamS Nm Expr       -- \?x.e
-    | AppS Expr Expr     -- e e
-    | LetS Nm Expr Expr  -- letS f = \?x.\?y. ... in e
-    deriving Show
+    = Const Int                          -- n
+    | Var Nm                             -- x
+    | Plus Expr Expr                     -- e1 + e2
+    | Less Expr Expr                     -- e1 < e2
+    | If Expr Expr Expr                  -- if e e1 e0
+    | Lam (Bind Nm Expr)                 -- \x.e
+    | App Expr Expr                      -- e e
+    | VarS Nm                            -- ?x
+    | LamS (Bind Nm Expr)                -- \?x.e
+    | LetS (Bind (Nm, Embed Expr) Expr)  -- letS f = \?x.\?y. ... in e
+    deriving (Show, Generic, Typeable)
     -- TODO Unbound 기반으로 바꿔야 할지도
 
+instance Alpha Expr
 
-type Env a = [(Nm,a)]
-data Sem v = Val v | Cl (Env (Sem v)) Expr
+type SEnv = [(Nm,Expr)]
 
-type Val = Sem Int
-
-eval :: Env Val -> Expr -> Sem Int
-eval _ _ = undefined
-
--- type ValS = Sem Expr
--- expand :: Env ValS -> ValS Expr
--- expand _ _ = undefined
+expand :: (MonadFail m, Fresh m) => SEnv -> Expr -> m Expr
+expand _   e@(Const n)   = return e
+expand _   e@(Var x)     = return e
+expand env (Plus e1 e2)  = do -- TODO constant folding?
+    e1' <- expand env e1
+    e2' <- expand env e2
+    return $ Plus e1' e2'
+expand env (Less e1 e2)  = do -- TODO constant folding?
+    e1' <- expand env e1
+    e2' <- expand env e2
+    return $ Less e1' e2'
+expand env (If e e1 e0)  = do -- TODO constant folding?
+    e'  <- expand env e
+    e1' <- expand env e1
+    e0' <- expand env e0
+    return $ If e' e1' e0'
+expand env (Lam b)       = do
+    (x,e) <- unbind b
+    e' <- expand env e
+    return $ Lam (bind x e')
+expand env (App e1 e2)   = do
+    e1' <- expand env e1
+    e2' <- expand env e2
+    case e1' of
+        LamS b -> undefined -- 매크로 확장
+        e1'    -> return $ App e1' e2'
+expand env (VarS x)      =
+    case lookup x env of
+        Just s  -> return s
+        Nothing -> error "TODO VarS x error message"
+expand env e@(LamS b) = return e
+expand _ (LetS b) = undefined -- 매크로 정의
 
 {-
 let a = 10
