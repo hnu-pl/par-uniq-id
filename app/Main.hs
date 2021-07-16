@@ -81,12 +81,9 @@ expand env (App e1 e2)   = do
     e2' <- expand env e2
     case e1' of
         LamS b -> do (x,e) <- unbind b
-                     return $ subst x e2' e
+                     expand env (subst x e2' e)
         e1'    -> return $ App e1' e2'
-expand env e@(LamS b) = do
-    (x,e) <- unbind b
-    e' <- expand env e
-    return $ LamS (bind x e')
+expand env e@(LamS b) = return e
 expand env (LetS b) = do
     ((f,Embed e1), e) <- unbind b -- letS f = e1 in e
     e1' <- expand env e1
@@ -96,7 +93,7 @@ lamS x = LamS . bind x
 
 e99 = LetS . bind (gt, embed (lamS x . lamS y $ Less _y _x)) $
       LetS . bind (eq, embed (lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) (Const 1))) $
-      App (App (Var eq) (Const 4)) (Const 3)
+      App (App (Var eq) (Const 5)) (Const 3)
     where
         gt = s2n "gt"
         eq = s2n "eq"
@@ -108,7 +105,7 @@ e99 = LetS . bind (gt, embed (lamS x . lamS y $ Less _y _x)) $
         _y = Var y
 
 -- >>> runFreshM (expand [] e99)
--- Less (Plus (Less (Const 4) (Const 3)) (Less (Const 3) (Const 4))) (Const 1)
+-- Less (Plus (Less (Const 5) (Const 3)) (Less (Const 3) (Const 5))) (Const 1)
     
 {-
 let a = 10
