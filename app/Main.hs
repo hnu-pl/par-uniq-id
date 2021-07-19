@@ -53,25 +53,35 @@ instance Subst Expr Expr where
 
 type SEnv = [(Nm,Expr)]
 
+cfold1 (Plus (Const 0)  e2        ) = e2
+cfold1 (Plus e1         (Const 0) ) = e1
+cfold1 (Plus (Const n1) (Const n2)) = Const (n1 + n2)
+cfold1 (Less (Const n1) (Const n2))
+                        | n1 < n2   = Const 1
+                        | otherwise = Const 0
+cfold1 (If (Const 0) e1 e0) = e0
+cfold1 (If (Const _) e1 e0) = e1
+cfold1 e = e
+
 expand :: Fresh m => SEnv -> Expr -> m Expr
 expand _   e@(Const n)   = return e
 expand env e@(Var x)     =
     case lookup x env of
         Just e1 -> return e1
         Nothing -> return e 
-expand env (Plus e1 e2)  = do -- TODO constant folding?
+expand env (Plus e1 e2)  = do
     e1' <- expand env e1
     e2' <- expand env e2
-    return $ Plus e1' e2'
-expand env (Less e1 e2)  = do -- TODO constant folding?
+    return . cfold1 $ Plus e1' e2'
+expand env (Less e1 e2)  = do
     e1' <- expand env e1
     e2' <- expand env e2
-    return $ Less e1' e2'
-expand env (If e e1 e0)  = do -- TODO constant folding?
+    return . cfold1 $ Less e1' e2'
+expand env (If e e1 e0)  = do
     e'  <- expand env e
     e1' <- expand env e1
     e0' <- expand env e0
-    return $ If e' e1' e0'
+    return . cfold1 $ If e' e1' e0'
 expand env (Lam b)       = do
     (x,e) <- unbind b
     e' <- expand env e
@@ -93,7 +103,7 @@ lamS x = LamS . bind x
 
 e99 = LetS . bind (gt, embed (lamS x . lamS y $ Less _y _x)) $
       LetS . bind (eq, embed (lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) (Const 1))) $
-      App (App (Var eq) (Const 5)) (Const 3)
+      Var eq `App` _u `App` _v 
     where
         gt = s2n "gt"
         eq = s2n "eq"
@@ -103,10 +113,14 @@ e99 = LetS . bind (gt, embed (lamS x . lamS y $ Less _y _x)) $
         _eq a b = App (Var eq) a `App` b
         _x = Var x
         _y = Var y
+        u = s2n "u"
+        v = s2n "v"
+        _u = Var u
+        _v = Var v
 
 -- >>> runFreshM (expand [] e99)
--- Less (Plus (Less (Const 5) (Const 3)) (Less (Const 3) (Const 5))) (Const 1)
-    
+-- Less (Plus (Less (Var u) (Var v)) (Less (Var v) (Var u))) (Const 1)
+
 {-
 let a = 10
 let b = 7 
