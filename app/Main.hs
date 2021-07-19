@@ -13,8 +13,8 @@ import System.Environment
 
 import qualified Control.Monad.Parallel as MP
 
-import GHC.Generics
-import Data.Typeable
+import GHC.Generics ( Generic )
+import Data.Typeable ( Typeable )
 import Unbound.Generics.LocallyNameless
 
 qsort [] = []
@@ -34,17 +34,17 @@ main = do
 
 type Nm = Name Expr
 data Expr
-    = Const Int                          -- n
-    | Var Nm                             -- x
-    | Plus Expr Expr                     -- e1 + e2
-    | Less Expr Expr                     -- e1 < e2
-    | If Expr Expr Expr                  -- if e e1 e0
-    | Lam (Bind Nm Expr)                 -- \x.e
-    | App Expr Expr                      -- e e
-    | LamS (Bind Nm Expr)                -- \?x.e
-    | LetS (Bind (Nm, Embed Expr) Expr)  -- letS f = \?x.\?y. ... in e
+    = Const Int              -- n
+    | Var Nm                 -- x
+    | Plus Expr Expr         -- e1 + e2
+    | Less Expr Expr         -- e1 < e2
+    | If Expr Expr Expr      -- if e e1 e0
+    | Lam (Bind Nm Expr)     -- \x.e
+    | App Expr Expr          -- e e
+    | LamS (Bind Nm Expr)    -- \?x.e
+    | LetS (Bind (Nm, Embed Expr) Expr)           -- letS f = \?x.\?y. ... in e
+    | LetRecS (Bind (Rec (Nm, Embed Expr)) Expr)  -- letrecS f = \?x.\?y. ... in e
     deriving (Show, Generic, Typeable)
-    -- TODO Unbound 기반으로 바꿔야 할지도
 
 instance Alpha Expr
 instance Subst Expr Expr where
@@ -98,28 +98,67 @@ expand env (LetS b) = do
     ((f,Embed e1), e) <- unbind b -- letS f = e1 in e
     e1' <- expand env e1
     expand ((f,e1'):env) e
+expand env (LetRecS b) = do
+    (r, e) <- unbind b -- letS f = e1 in e
+    let (f,Embed e1) = unrec r
+    e1' <- expand ((f,e1):env) e1
+    expand ((f,e1'):env) e
 
 lamS x = LamS . bind x
+letS f body = LetS . bind (f, embed body)
+letrecS f body = LetRecS . bind (rec (f, embed body))
 
-e99 = LetS . bind (gt, embed (lamS x . lamS y $ Less _y _x)) $
-      LetS . bind (eq, embed (lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) (Const 1))) $
-      Var eq `App` _u `App` _v 
+e99 = letS gt ( lamS x . lamS y $ Less _y _x ) $
+      letS eq ( lamS x . lamS y $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
+      _eq _u _v 
     where
         gt = s2n "gt"
         eq = s2n "eq"
         x = s2n "?x"
         y = s2n "?y"
-        _gt a b = App (Var gt) a `App` b
-        _eq a b = App (Var eq) a `App` b
+        _gt a b = Var gt `App` a `App` b
+        _eq a b = Var eq `App` a `App` b
         _x = Var x
         _y = Var y
         u = s2n "u"
         v = s2n "v"
         _u = Var u
         _v = Var v
+        _1 = Const 1
+
+e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
+      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) (Const 1) ) $
+      letrecS mul ( lamS x . lamS y $
+                    If (Less _y _1) _0
+                                    (_x `Plus` _mul _x (Plus _y (Const (-1)))) ) $
+      _mul _u _5
+    where
+        gt = s2n "gt"
+        eq = s2n "eq"
+        mul = s2n "mul" -- 양수끼리 곱셈만 고려
+        x = s2n "?x"
+        y = s2n "?y"
+        _gt a b = Var gt `App` a `App` b
+        _eq a b = Var eq `App` a `App` b
+        _mul a b = Var mul `App` a `App` b
+        _x = Var x
+        _y = Var y
+        u = s2n "u"
+        v = s2n "v"
+        _u = Var u
+        _v = Var v
+        _0 = Const 0
+        _1 = Const 1
+        _5 = Const 5
+
 
 -- >>> runFreshM (expand [] e99)
 -- Less (Plus (Less (Var u) (Var v)) (Less (Var v) (Var u))) (Const 1)
+
+-- >>> runFreshM (expand [] e98)
+-- Plus (Var u) (Plus (Var u) (Var u))
+
+
 
 {-
 let a = 10
