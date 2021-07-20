@@ -151,12 +151,11 @@ e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
         _1 = Const 1
         _5 = Const 5
 
-
 -- >>> runFreshM (expand [] e99)
 -- Less (Plus (Less (Var u) (Var v)) (Less (Var v) (Var u))) (Const 1)
 
 -- >>> runFreshM (expand [] e98)
--- Plus (Var u) (Plus (Var u) (Var u))
+-- Plus (Var u) (Plus (Var u) (Plus (Var u) (Plus (Var u) (Var u))))
 
 
 

@@ -111,7 +111,7 @@ instance WC.MonadWriter w m => WC.MonadWriter w (FreshMT m) where
 instance Monad m => Fresh (FreshMT m) where
   fresh (Fn s _) = FreshMT $ do
     (n, k) <- St.get
-    St.put $! (n + k, k) -- TODO (,)만 srict   안에 있는 n+k는 보장이 안됨
+    St.put $! ((,) $! (n+k)) $! k
     return $ (Fn s n)
   fresh nm@(Bn {}) = return nm
 
