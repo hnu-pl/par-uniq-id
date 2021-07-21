@@ -38,6 +38,7 @@ data Expr
     | Var Nm                 -- x
     | Plus Expr Expr         -- e1 + e2
     | Less Expr Expr         -- e1 < e2
+    -- 사칙연산을 다 추가하고 매크로 확장은 exponential을 반반씩 나눠가면서 조금 효율적으로 전개 하는
     | If Expr Expr Expr      -- if e e1 e0
     | Lam (Bind Nm Expr)     -- \x.e
     | App Expr Expr          -- e e
@@ -128,9 +129,10 @@ e99 = letS gt ( lamS x . lamS y $ Less _y _x ) $
 
 e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
       letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) (Const 1) ) $
-      letrecS mul ( lamS x . lamS y $
+      letrecS mul ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
                     If (Less _y _1) _0
                                     (_x `Plus` _mul _x (Plus _y (Const (-1)))) ) $
+      -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
       _mul _u _5
     where
         gt = s2n "gt"
@@ -172,23 +174,9 @@ in F b a
      let b = a * 3
 -}
 
-main = do
-    print bench1
+example1 = runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x"), fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x")] ])
 
--- main = print example1
-
-{-
-example1 = runParallel
-    [ sequence [newId]
-    , sequence [newId, newId, newId]
-    , sequence [newId, newId]
-    ] `runState` (0,1)
-
--- >>> runParallel (sequence <$> [ [newId], [newId, newId, newId], [newId, newId] ]) `runState` (0,1)
--- ([[0],[1,4,7],[2,5]],(10,1))
-
-bench1 n m = flip runState (0,1) . runParallel $
-    replicate n (foldl1 (>>) $ replicate m newId)
+bench1 n m = runFreshM . runPar $ replicate n (foldl1 (>>) $ replicate m (fresh(s2n "x")))
 
 main = do
     a0:a1:a2:_ <- getArgs
@@ -198,20 +186,22 @@ main = do
     case k of
         1 -> do
             putStrLn $ " bench1 "++show n++" "++show m
-            print $ bench1 n m 
+            print $ bench1 n m
+{-
         2 -> do
             putStrLn $ " bench2 "++show n++" "++show m
             print =<< bench2 n m 
+-}
 
-
+{-
 newIdMVar :: MVar Int -> IO Int
 newIdMVar c = modifyMVar c (\n -> return (n+1,n))
-
 bench2 n m = do
     c <- newMVar (0 :: Int)
     let new = newIdMVar c
     print . maximum =<< MP.replicateM n (foldl1 (>>) $ replicate m new)
 
+-}
 {-
 stack run -- 1 8 2000000 +RTS -s -N1
 stack run -- 1 8 2000000 +RTS -s -N2
@@ -234,4 +224,3 @@ stack run -- 2 8 100000 +RTS -s -N7
 stack run -- 2 8 100000 +RTS -s -N8
 -}
 
--}
