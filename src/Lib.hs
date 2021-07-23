@@ -13,7 +13,9 @@ import Control.Monad.Trans.State.Lazy
 import Unbound.Generics.LocallyNameless
 -- import Control.Monad.State.Class
 
+
 runPar :: [FreshM a] -> FreshM [a]
+-- runPar ms = sequence ms
 runPar ms = FreshMT $ do
     (k,i) <- get
     let n = fromIntegral $ length ms
@@ -22,6 +24,7 @@ runPar ms = FreshMT $ do
     let (as,ss) = unzip ps
     put (maximum (map fst ss), i)
     return (as `using` parList rseq)
+
 
 {-
 newId :: Monad m => StateT (Int, Int) m Int
