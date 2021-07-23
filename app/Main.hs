@@ -37,8 +37,9 @@ data Expr
     = Const Int              -- n
     | Var Nm                 -- x
     | Plus Expr Expr         -- e1 + e2
+    | Mult Expr Expr         -- e1 * e2
+    | Div  Expr Expr         -- e1 / e2
     | Less Expr Expr         -- e1 < e2
-    -- 사칙연산을 다 추가하고 매크로 확장은 exponential을 반반씩 나눠가면서 조금 효율적으로 전개 하는
     | If Expr Expr Expr      -- if e e1 e0
     | Lam (Bind Nm Expr)     -- \x.e
     | App Expr Expr          -- e e
@@ -57,6 +58,13 @@ type SEnv = [(Nm,Expr)]
 cfold1 (Plus (Const 0)  e2        ) = e2
 cfold1 (Plus e1         (Const 0) ) = e1
 cfold1 (Plus (Const n1) (Const n2)) = Const (n1 + n2)
+cfold1 (Mult (Const 0)  e2        ) = Const 0
+cfold1 (Mult (Const 1)  e2        ) = e2
+cfold1 (Mult e1         (Const 0) ) = Const 0
+cfold1 (Mult e1         (Const 1) ) = e1
+cfold1 (Mult (Const n1) (Const n2)) = Const (n1 * n2)
+cfold1 (Div  e1         (Const 1) ) = e1
+cfold1 (Div  (Const n1) (Const n2)) = Const (n1 `div` n2)
 cfold1 (Less (Const n1) (Const n2))
                         | n1 < n2   = Const 1
                         | otherwise = Const 0
@@ -74,15 +82,26 @@ expand env (Plus e1 e2)  = do
     e1' <- expand env e1
     e2' <- expand env e2
     return . cfold1 $ Plus e1' e2'
+expand env (Mult e1 e2)  = do
+    e1' <- expand env e1
+    e2' <- expand env e2
+    return . cfold1 $ Mult e1' e2'
+expand env (Div e1 e2)  = do
+    e1' <- expand env e1
+    e2' <- expand env e2
+    return . cfold1 $ Div e1' e2'
 expand env (Less e1 e2)  = do
     e1' <- expand env e1
     e2' <- expand env e2
     return . cfold1 $ Less e1' e2'
 expand env (If e e1 e0)  = do
     e'  <- expand env e
-    e1' <- expand env e1
-    e0' <- expand env e0
-    return . cfold1 $ If e' e1' e0'
+    case e' of -- short circuit
+        Const 0 -> expand env e0
+        Const _ -> expand env e1
+        _   ->  do e1' <- expand env e1
+                   e0' <- expand env e0
+                   return . cfold1 $ If e' e1' e0'
 expand env (Lam b)       = do
     (x,e) <- unbind b
     e' <- expand env e
@@ -102,9 +121,10 @@ expand env (LetS b) = do
 expand env (LetRecS b) = do
     (r, e) <- unbind b -- letS f = e1 in e
     let (f,Embed e1) = unrec r
-    e1' <- expand ((f,e1):env) e1
+    e1' <- expand env e1
     expand ((f,e1'):env) e
 
+lam x = Lam . bind x
 lamS x = LamS . bind x
 letS f body = LetS . bind (f, embed body)
 letrecS f body = LetRecS . bind (rec (f, embed body))
@@ -128,21 +148,25 @@ e99 = letS gt ( lamS x . lamS y $ Less _y _x ) $
         _1 = Const 1
 
 e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
-      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) (Const 1) ) $
-      letrecS mul ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
-                    If (Less _y _1) _0
-                                    (_x `Plus` _mul _x (Plus _y (Const (-1)))) ) $
+      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) _1 ) $
+      letS evn ( lamS x $ _x `_eq` Mult (Div _x _2) _2 ) $
+      letrecS exp ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
+                    If (Less _y _1) _1 $
+                    If (_evn _y)    (lam x (Mult _x _x) `App` _exp _x (Div _y _2)) $
+                                    _x `Mult` _exp _x (Plus _y (Const (-1)))         ) $
       -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
-      _mul _u _5
+      _exp (Var u) _5
     where
         gt = s2n "gt"
         eq = s2n "eq"
-        mul = s2n "mul" -- 양수끼리 곱셈만 고려
+        exp = s2n "exp" -- 음수가 아닌 거듭제곱만 고려
+        evn = s2n "evn" -- 음수가 아닌 거듭제곱만 고려
         x = s2n "?x"
         y = s2n "?y"
         _gt a b = Var gt `App` a `App` b
         _eq a b = Var eq `App` a `App` b
-        _mul a b = Var mul `App` a `App` b
+        _exp a b = Var exp `App` a `App` b
+        _evn a = Var evn `App` a
         _x = Var x
         _y = Var y
         u = s2n "u"
@@ -151,13 +175,16 @@ e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
         _v = Var v
         _0 = Const 0
         _1 = Const 1
+        _2 = Const 2
+        _3 = Const 3
+        _4 = Const 4
         _5 = Const 5
 
 -- >>> runFreshM (expand [] e99)
 -- Less (Plus (Less (Var u) (Var v)) (Less (Var v) (Var u))) (Const 1)
 
 -- >>> runFreshM (expand [] e98)
--- Plus (Var u) (Plus (Var u) (Plus (Var u) (Plus (Var u) (Var u))))
+-- Mult (Var u) (App (Lam (<?x18> Mult (Var 0@0) (Var 0@0))) (App (Lam (<?x26> Mult (Var 0@0) (Var 0@0))) (Var u)))
 
 
 
@@ -176,6 +203,7 @@ in F b a
 
 example1 = runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x"), fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x")] ])
 
+bench1 :: Int -> Int -> [Name a]
 bench1 n m = runFreshM . runPar $ replicate n (foldl1 (>>) $ replicate m (fresh(s2n "x")))
 
 main = do
