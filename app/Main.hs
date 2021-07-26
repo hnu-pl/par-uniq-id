@@ -34,7 +34,7 @@ main = do
 
 type Nm = Name Expr
 data Expr
-    = Const Int              -- n
+    = Const Integer              -- n
     | Var Nm                 -- x
     | Plus Expr Expr         -- e1 + e2
     | Mult Expr Expr         -- e1 * e2
@@ -180,13 +180,47 @@ e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
         _4 = Const 4
         _5 = Const 5
 
+e97 m = letS gt ( lamS x . lamS y $ Less _y _x ) $
+      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) _1 ) $
+      letS evn ( lamS x $ _x `_eq` Mult (Div _x _2) _2 ) $
+      letrecS exp ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
+                    If (Less _y _1) _1 $
+                    If (_evn _y)    (_dbl (_exp _x (Div _y _2))) $
+                                    _x `Mult` _exp _x (Plus _y (Const (-1)))  ) $
+      -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
+      _exp (Var u) (Const m)
+    where
+        gt = s2n "gt"
+        eq = s2n "eq"
+        dbl = s2n "dbl"
+        exp = s2n "exp" -- 음수가 아닌 거듭제곱만 고려
+        evn = s2n "evn" -- 음수가 아닌 거듭제곱만 고려
+        x = s2n "?x"
+        y = s2n "?y"
+        _gt a b = Var gt `App` a `App` b
+        _eq a b = Var eq `App` a `App` b
+        _exp a b = Var exp `App` a `App` b
+        _evn a = Var evn `App` a
+        _dbl a = Var dbl `App` a
+        _x = Var x
+        _y = Var y
+        u = s2n "u"
+        v = s2n "v"
+        _u = Var u
+        _v = Var v
+        _0 = Const 0
+        _1 = Const 1
+        _2 = Const 2
+
+
 -- >>> runFreshM (expand [] e99)
 -- Less (Plus (Less (Var u) (Var v)) (Less (Var v) (Var u))) (Const 1)
 
 -- >>> runFreshM (expand [] e98)
 -- Mult (Var u) (App (Lam (<?x18> Mult (Var 0@0) (Var 0@0))) (App (Lam (<?x26> Mult (Var 0@0) (Var 0@0))) (Var u)))
 
-
+-- >>> runFreshM (expand [] (e97 6))
+-- App (Var dbl) (Mult (Var u) (App (Var dbl) (Var u)))
 
 {-
 let a = 10
@@ -206,20 +240,21 @@ example1 = runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "
 bench1 :: Int -> Int -> [Name a]
 bench1 n m = runFreshM . runPar $ replicate n (foldl1 (>>) $ replicate m (fresh(s2n "x")))
 
+bench2 n m = runFreshM $ do
+    expand [] (e97 (n^m))
+
 main = do
     a0:a1:a2:_ <- getArgs
     let k = read a0 :: Int
-        n = read a1 :: Int
-        m = read a2 :: Int
+        n = read a1 :: Integer
+        m = read a2 :: Integer
     case k of
         1 -> do
             putStrLn $ " bench1 "++show n++" "++show m
-            print $ bench1 n m
-{-
+            print $ bench1 (fromIntegral n) (fromIntegral m)
         2 -> do
             putStrLn $ " bench2 "++show n++" "++show m
-            print =<< bench2 n m 
--}
+            print $ bench2 n m 
 
 {-
 newIdMVar :: MVar Int -> IO Int
