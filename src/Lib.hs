@@ -1,10 +1,4 @@
-module Lib
-{-
-    ( fresh(s2n "x")
-    , runParallel
-    , runParallelT
-    ) where
--} where
+module Lib where
 
 import Control.Parallel.Strategies
 -- import Control.Monad.Trans.State.Strict

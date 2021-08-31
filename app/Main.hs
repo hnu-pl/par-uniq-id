@@ -16,6 +16,7 @@ import qualified Control.Monad.Parallel as MP
 import GHC.Generics ( Generic )
 import Data.Typeable ( Typeable )
 import Unbound.Generics.LocallyNameless
+import Unbound.Generics.LocallyNameless.Internal.Fold
 
 qsort [] = []
 qsort [y] = [y]
@@ -34,7 +35,7 @@ main = do
 
 type Nm = Name Expr
 data Expr
-    = Const Integer              -- n
+    = Const Integer          -- n
     | Var Nm                 -- x
     | Plus Expr Expr         -- e1 + e2
     | Mult Expr Expr         -- e1 * e2
@@ -42,10 +43,11 @@ data Expr
     | Less Expr Expr         -- e1 < e2
     | If Expr Expr Expr      -- if e e1 e0
     | Lam (Bind Nm Expr)     -- \x.e
+    | LetRec (Bind (Rec (Nm, Embed Expr)) Expr)  -- letrecS f = e1 in e2
     | App Expr Expr          -- e e
-    | LamS (Bind Nm Expr)    -- \?x.e
-    | LetS (Bind (Nm, Embed Expr) Expr)           -- letS f = \?x.\?y. ... in e
-    | LetRecS (Bind (Rec (Nm, Embed Expr)) Expr)  -- letrecS f = \?x.\?y. ... in e
+    | Brk Expr               -- <e>
+    | Esc Expr               -- ~e 
+    | Run Expr               -- !e
     deriving (Show, Generic, Typeable)
 
 instance Alpha Expr
@@ -53,82 +55,69 @@ instance Subst Expr Expr where
   isvar (Var  x) = Just (SubstName x)
   isvar _     = Nothing
 
-type SEnv = [(Nm,Expr)]
-
-cfold1 (Plus (Const 0)  e2        ) = e2
-cfold1 (Plus e1         (Const 0) ) = e1
-cfold1 (Plus (Const n1) (Const n2)) = Const (n1 + n2)
-cfold1 (Mult (Const 0)  e2        ) = Const 0
-cfold1 (Mult (Const 1)  e2        ) = e2
-cfold1 (Mult e1         (Const 0) ) = Const 0
-cfold1 (Mult e1         (Const 1) ) = e1
-cfold1 (Mult (Const n1) (Const n2)) = Const (n1 * n2)
-cfold1 (Div  e1         (Const 1) ) = e1
-cfold1 (Div  (Const n1) (Const n2)) = Const (n1 `div` n2)
-cfold1 (Less (Const n1) (Const n2))
-                        | n1 < n2   = Const 1
-                        | otherwise = Const 0
-cfold1 (If (Const 0) e1 e0) = e0
-cfold1 (If (Const _) e1 e0) = e1
-cfold1 e = e
-
-expand :: Fresh m => SEnv -> Expr -> m Expr
-expand _   e@(Const n)   = return e
-expand env e@(Var x)     =
-    case lookup x env of
-        Just e1 -> return e1
-        Nothing -> return e 
-expand env (Plus e1 e2)  = do
-    e1' <- expand env e1
-    e2' <- expand env e2
-    return . cfold1 $ Plus e1' e2'
-expand env (Mult e1 e2)  = do
-    e1' <- expand env e1
-    e2' <- expand env e2
-    return . cfold1 $ Mult e1' e2'
-expand env (Div e1 e2)  = do
-    e1' <- expand env e1
-    e2' <- expand env e2
-    return . cfold1 $ Div e1' e2'
-expand env (Less e1 e2)  = do
-    e1' <- expand env e1
-    e2' <- expand env e2
-    return . cfold1 $ Less e1' e2'
-expand env (If e e1 e0)  = do
-    e'  <- expand env e
-    case e' of -- short circuit
-        Const 0 -> expand env e0
-        Const _ -> expand env e1
-        _   ->  do e1' <- expand env e1
-                   e0' <- expand env e0
-                   return . cfold1 $ If e' e1' e0'
-expand env (Lam b)       = do
+eval k e  | k < 0    = error $ show e++" at impossible (negative) level "++show k
+eval _ e@(Const n)   = return e
+eval 0 e@(Var x)     = error $ show x++" at level 0"
+eval k e@(Var x)     = return e
+eval 0 (Plus e1 e2)  = do
+    Const n2 <- eval 0 e1
+    Const n1 <- eval 0 e2
+    return $ Const (n1 + n2)
+eval 0 (Mult e1 e2)  = do
+    Const n2 <- eval 0 e1
+    Const n1 <- eval 0 e2
+    return $ Const (n1 * n2)
+eval 0 (Div e1 e2)  = do
+    Const n2 <- eval 0 e1
+    Const n1 <- eval 0 e2
+    return $ Const (n1 `div` n2)
+eval 0 (Less e1 e2)  = do
+    Const n2 <- eval 0 e1
+    Const n1 <- eval 0 e2
+    return $ Const (if n1 < n2 then 1 else 0)
+eval k (Plus e1 e2)  = Plus <$> eval k e1 <*> eval k e2
+eval k (Mult e1 e2)  = Mult <$> eval k e1 <*> eval k e2
+eval k (Div  e1 e2)  = Div  <$> eval k e1 <*> eval k e2
+eval k (Less e1 e2)  = Less <$> eval k e1 <*> eval k e2
+eval 0 (If e e1 e0)  = do
+    Const n <- eval 0 e
+    if n==0 then eval 0 e0 else eval 0 e1
+eval k (If e e1 e0)  = If <$> eval k e <*> eval k e1 <*> eval k e0
+eval 0 e@(Lam _)     = return e
+eval k e@(Lam b)     = do
     (x,e) <- unbind b
-    e' <- expand env e
+    e' <- eval k e
     return $ Lam (bind x e')
-expand env (App e1 e2)   = do
-    e1' <- expand env e1
-    e2' <- expand env e2
-    case e1' of
-        LamS b -> do (x,e) <- unbind b
-                     expand env (subst x e2' e)
-        e1'    -> return $ App e1' e2'
-expand env e@(LamS b) = return e
-expand env (LetS b) = do
-    ((f,Embed e1), e) <- unbind b -- letS f = e1 in e
-    e1' <- expand env e1
-    expand ((f,e1'):env) e
-expand env (LetRecS b) = do
-    (r, e) <- unbind b -- letS f = e1 in e
+eval 0 (App e1 e2)   = do
+    Lam b <- eval 0 e1
+    e2' <- eval 0 e2
+    (x,e) <- unbind b
+    return $ subst x e2' e
+eval k (App e1 e2)  = App <$> eval k e1 <*> eval k e2
+eval 0 e@(LetRec b)  = do
+    (r,e2) <- unbind b
     let (f,Embed e1) = unrec r
-    e1' <- expand env e1
-    expand ((f,e1'):env) e
+    let e1' = subst f (LetRec (bind (rec(f, embed e1)) (Var f))) e1
+    return $ subst f e1' e2
+eval k e@(LetRec b)  = do
+    (r,e2) <- unbind b
+    let (f,Embed e1) = unrec r
+    e1' <- eval k e1
+    e2' <- eval k e2
+    return $ LetRec (bind (rec(f, embed e1')) e2')
+eval k (Brk e)  = Brk <$> eval (k+1) e
+eval 0 (Esc e)  = error $ show e++" cannot escape at level 0"
+eval 1 (Esc e)  = do
+    Brk e' <- eval 0 e
+    return e'
+eval k (Esc e)  = Esc <$> eval (k-1) e
+eval 0 (Run e)  = error $ show e++" cannot run at level 0"
+eval k (Run e)  = Run <$> eval k e
 
 lam x = Lam . bind x
-lamS x = LamS . bind x
-letS f body = LetS . bind (f, embed body)
-letrecS f body = LetRecS . bind (rec (f, embed body))
+letrec f body = LetRec . bind (rec (f, embed body))
 
+{-
 e99 = letS gt ( lamS x . lamS y $ Less _y _x ) $
       letS eq ( lamS x . lamS y $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
       _eq _u _v 
@@ -155,7 +144,7 @@ e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
                     If (_evn _y)    (lam x (Mult _x _x) `App` _exp _x (Div _y _2)) $
                                     _x `Mult` _exp _x (Plus _y (Const (-1)))         ) $
       -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
-      _exp (Var u) _5
+      _exp _u _5
     where
         gt = s2n "gt"
         eq = s2n "eq"
@@ -188,7 +177,7 @@ e97 m = letS gt ( lamS x . lamS y $ Less _y _x ) $
                     If (_evn _y)    (_dbl (_exp _x (Div _y _2))) $
                                     _x `Mult` _exp _x (Plus _y (Const (-1)))  ) $
       -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
-      _exp (Var u) (Const m)
+      _exp _u (Const m)
     where
         gt = s2n "gt"
         eq = s2n "eq"
@@ -211,6 +200,35 @@ e97 m = letS gt ( lamS x . lamS y $ Less _y _x ) $
         _0 = Const 0
         _1 = Const 1
         _2 = Const 2
+
+e96 vs n m = letS gt ( lamS x . lamS y $ Less _y _x ) $
+      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) _1 ) $
+      letS evn ( lamS x $ _x `_eq` Mult (Div _x _2) _2 ) $
+      letrecS exp ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
+                    If (Less _y _1) _1 $
+                    If (_evn _y)    (_dbl (_exp _x (Div _y _2))) $
+                                    _x `Mult` _exp _x (Plus _y (Const (-1)))  ) $
+      -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
+      foldl1 Plus [_exp (Var v) (Const m) | v<-vs]
+    where
+        gt = s2n "gt"
+        eq = s2n "eq"
+        dbl = s2n "dbl"
+        exp = s2n "exp" -- 음수가 아닌 거듭제곱만 고려
+        evn = s2n "evn" -- 음수가 아닌 거듭제곱만 고려
+        x = s2n "?x"
+        y = s2n "?y"
+        _gt a b = Var gt `App` a `App` b
+        _eq a b = Var eq `App` a `App` b
+        _exp a b = Var exp `App` a `App` b
+        _evn a = Var evn `App` a
+        _dbl a = Var dbl `App` a
+        _x = Var x
+        _y = Var y
+        _0 = Const 0
+        _1 = Const 1
+        _2 = Const 2
+
 
 
 -- >>> runFreshM (expand [] e99)
@@ -235,13 +253,19 @@ in F b a
      let b = a * 3
 -}
 
+-}
+
 example1 = runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x"), fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x")] ])
 
 bench1 :: Int -> Int -> [Name a]
 bench1 n m = runFreshM . runPar $ replicate n (foldl1 (>>) $ replicate m (fresh(s2n "x")))
 
+{-
+-- x1^m + x2^m + ... + xn^m
 bench2 n m = runFreshM $ do
-    expand [] (e97 (n^m))
+    vs <- replicateM (fromIntegral n) (fresh $ s2n "v")
+    expand [] (e96 vs n m)
+-}
 
 main = do
     a0:a1:a2:_ <- getArgs
@@ -252,9 +276,14 @@ main = do
         1 -> do
             putStrLn $ " bench1 "++show n++" "++show m
             print $ bench1 (fromIntegral n) (fromIntegral m)
+{-}
         2 -> do
             putStrLn $ " bench2 "++show n++" "++show m
-            print $ bench2 n m 
+            let e2 = bench2 n m -- u^(n^m) 을 expand
+            print $ length (toListOf fv e2 :: [Nm]) -- u^(n^m) 을 expand
+-}
+
+
 
 {-
 newIdMVar :: MVar Int -> IO Int
