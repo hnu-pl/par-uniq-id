@@ -8,6 +8,7 @@ import Control.Concurrent.MVar.Strict
 import Control.Parallel.Strategies
 import Control.Monad.Trans.State.Strict
 import Control.Monad
+import Control.Monad.Fail
 import Data.List
 import System.Environment
 
@@ -55,25 +56,25 @@ instance Subst Expr Expr where
   isvar (Var  x) = Just (SubstName x)
   isvar _     = Nothing
 
-eval k e  | k < 0    = error $ show e++" at impossible (negative) level "++show k
+eval k e  | k < 0    = fail $ show e++" at impossible (negative) level "++show k
 eval _ e@(Const n)   = return e
-eval 0 e@(Var x)     = error $ show x++" at level 0"
+eval 0 e@(Var x)     = fail $ show x++" at level 0"
 eval k e@(Var x)     = return e
 eval 0 (Plus e1 e2)  = do
-    Const n2 <- eval 0 e1
-    Const n1 <- eval 0 e2
+    Const n1 <- eval 0 e1
+    Const n2 <- eval 0 e2
     return $ Const (n1 + n2)
 eval 0 (Mult e1 e2)  = do
-    Const n2 <- eval 0 e1
-    Const n1 <- eval 0 e2
+    Const n1 <- eval 0 e1
+    Const n2 <- eval 0 e2
     return $ Const (n1 * n2)
 eval 0 (Div e1 e2)  = do
-    Const n2 <- eval 0 e1
-    Const n1 <- eval 0 e2
+    Const n1 <- eval 0 e1
+    Const n2 <- eval 0 e2
     return $ Const (n1 `div` n2)
 eval 0 (Less e1 e2)  = do
-    Const n2 <- eval 0 e1
-    Const n1 <- eval 0 e2
+    Const n1 <- eval 0 e1
+    Const n2 <- eval 0 e2
     return $ Const (if n1 < n2 then 1 else 0)
 eval k (Plus e1 e2)  = Plus <$> eval k e1 <*> eval k e2
 eval k (Mult e1 e2)  = Mult <$> eval k e1 <*> eval k e2
@@ -92,7 +93,7 @@ eval 0 (App e1 e2)   = do
     Lam b <- eval 0 e1
     e2' <- eval 0 e2
     (x,e) <- unbind b
-    return $ subst x e2' e
+    eval 0 (subst x e2' e)
 eval k (App e1 e2)  = App <$> eval k e1 <*> eval k e2
 eval 0 e@(LetRec b)  = do
     (r,e2) <- unbind b
@@ -111,22 +112,50 @@ eval 1 (Esc e)  = do
     Brk e' <- eval 0 e
     return e'
 eval k (Esc e)  = Esc <$> eval (k-1) e
-eval 0 (Run e)  = error $ show e++" cannot run at level 0"
+eval 0 (Run e)  = do
+    Brk e' <- eval 0 e
+    eval 0 e'
 eval k (Run e)  = Run <$> eval k e
 
 lam x = Lam . bind x
 letrec f body = LetRec . bind (rec (f, embed body))
 
-{-
-e99 = letS gt ( lamS x . lamS y $ Less _y _x ) $
-      letS eq ( lamS x . lamS y $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
-      _eq _u _v 
+
+
+e01 = Run $ Brk _1
+    where 
+        _1 = Const 1
+
+-- >>> runFreshMT (eval 0 e01)
+-- Const 1
+
+
+e02 = Run $ Brk (Esc (Brk _1))
+    where 
+        _1 = Const 1
+
+-- >>> runFreshMT (eval 0 e02)
+-- Const 1
+
+e03 = Run . Brk $ Esc(Brk _1) `Less` Esc(Brk _1)
+    where 
+        _1 = Const 1
+        _2 = Const 2
+
+-- >>> runFreshMT (eval 0 e03)
+-- Const 0
+
+
+e99 = -- letrec gt ( lam x . lam y . Brk $ Less _y _x ) $
+      -- letrec eq ( lam x . lam y . Brk $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
+      _gt (Brk _1) (Brk _2)
     where
         gt = s2n "gt"
         eq = s2n "eq"
         x = s2n "?x"
         y = s2n "?y"
-        _gt a b = Var gt `App` a `App` b
+        _gt a b = -- Var gt `App` a `App` b
+                  ( lam x . lam y . Brk $ Esc _y `Less` Esc _x) `App` a `App` b
         _eq a b = Var eq `App` a `App` b
         _x = Var x
         _y = Var y
@@ -135,7 +164,15 @@ e99 = letS gt ( lamS x . lamS y $ Less _y _x ) $
         _u = Var u
         _v = Var v
         _1 = Const 1
+        _2 = Const 2
 
+
+-- >>> runFreshMT (eval 0 e99)
+-- Brk (Less (Const 2) (Const 1))
+
+
+
+{-
 e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
       letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) _1 ) $
       letS evn ( lamS x $ _x `_eq` Mult (Div _x _2) _2 ) $
@@ -229,10 +266,6 @@ e96 vs n m = letS gt ( lamS x . lamS y $ Less _y _x ) $
         _1 = Const 1
         _2 = Const 2
 
-
-
--- >>> runFreshM (expand [] e99)
--- Less (Plus (Less (Var u) (Var v)) (Less (Var v) (Var u))) (Const 1)
 
 -- >>> runFreshM (expand [] e98)
 -- Mult (Var u) (App (Lam (<?x18> Mult (Var 0@0) (Var 0@0))) (App (Lam (<?x26> Mult (Var 0@0) (Var 0@0))) (Var u)))
