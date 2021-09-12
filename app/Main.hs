@@ -93,13 +93,13 @@ eval 0 (App e1 e2)   = do
     Lam b <- eval 0 e1
     e2' <- eval 0 e2
     (x,e) <- unbind b
-    eval 0 (subst x e2' e)
+    eval 0 $ subst x e2' e
 eval k (App e1 e2)  = App <$> eval k e1 <*> eval k e2
 eval 0 e@(LetRec b)  = do
     (r,e2) <- unbind b
     let (f,Embed e1) = unrec r
     let e1' = subst f (LetRec (bind (rec(f, embed e1)) (Var f))) e1
-    return $ subst f e1' e2
+    eval 0 $ subst f e1' e2
 eval k e@(LetRec b)  = do
     (r,e2) <- unbind b
     let (f,Embed e1) = unrec r
