@@ -146,16 +146,17 @@ e03 = Run . Brk $ Esc(Brk _1) `Less` Esc(Brk _1)
 -- Const 0
 
 
-e99 = -- letrec gt ( lam x . lam y . Brk $ Less _y _x ) $
-      -- letrec eq ( lam x . lam y . Brk $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
-      _gt (Brk _1) (Brk _2)
+e99 = letrec gt -- \x y . < ~y < ~x >
+             ( lam x . lam y . Brk $ Esc _y `Less` Esc _x ) $
+      letrec eq -- \x y . < (~x < ~y) + ~(gt _x _y) < 1 >
+             ( lam x . lam y . Brk $ Less (Less (Esc _x) (Esc _y) `Plus` Esc(_gt _x _y)) _1 ) $
+      Run $ _eq (Brk _1) (Brk _2)
     where
         gt = s2n "gt"
         eq = s2n "eq"
-        x = s2n "?x"
-        y = s2n "?y"
-        _gt a b = -- Var gt `App` a `App` b
-                  ( lam x . lam y . Brk $ Esc _y `Less` Esc _x) `App` a `App` b
+        x = s2n "x"
+        y = s2n "y"
+        _gt a b = Var gt `App` a `App` b
         _eq a b = Var eq `App` a `App` b
         _x = Var x
         _y = Var y
@@ -168,110 +169,96 @@ e99 = -- letrec gt ( lam x . lam y . Brk $ Less _y _x ) $
 
 
 -- >>> runFreshMT (eval 0 e99)
--- Brk (Less (Const 2) (Const 1))
+-- Const 0
 
 
 
-{-
-e98 = letS gt ( lamS x . lamS y $ Less _y _x ) $
-      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) _1 ) $
-      letS evn ( lamS x $ _x `_eq` Mult (Div _x _2) _2 ) $
-      letrecS exp ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
-                    If (Less _y _1) _1 $
-                    If (_evn _y)    (lam x (Mult _x _x) `App` _exp _x (Div _y _2)) $
-                                    _x `Mult` _exp _x (Plus _y (Const (-1)))         ) $
-      -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
-      _exp _u _5
+
+-- >>> runFreshMT (eval 0 e98)
+-- Brk (Mult (Var u) (App (Lam (<z19> Mult (Var 0@0) (Var 0@0))) (App (Lam (<z28> Mult (Var 0@0) (Var 0@0))) (Mult (Var u) (Const 1)))))
+
+e98 = letrec gt -- \x y . y < x
+             ( lam x . lam y $ _y `Less` _x ) $
+      letrec eq -- \x y . (x < y) + (gt x y) < 1
+             ( lam x . lam y $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
+      letrec evn -- \x . < \y . eq y <~y / 2 * 2> ) >
+             ( lam x $ _eq _x (Mult (Div _x _2) _2) ) $
+      letrec exp {- \x y -> if (y < 1)
+                              then < 1 >
+                              else if (evn y)
+                                then < (\x -> x*x) ~(exp x (y/2)) >
+                                else < x * ~(exp x (y + -1)) >
+                  -}
+             ( lam x . lam y $ -- x는 코드(문법트리) y는 그냥 값이 넘어오고
+                    If (Less _y _1) (Brk _1) $
+                    If (_evn _y)  (Brk (lam z (Mult _z _z) `App` Esc(_exp _x (Div _y _2)))) $
+                                  (Brk (Esc _x `Mult` Esc(_exp _x (Plus _y (Const (-1))))))
+                                              ) $
+      _exp (Brk _u) _5
     where
         gt = s2n "gt"
         eq = s2n "eq"
         exp = s2n "exp" -- 음수가 아닌 거듭제곱만 고려
         evn = s2n "evn" -- 음수가 아닌 거듭제곱만 고려
-        x = s2n "?x"
-        y = s2n "?y"
+        x = s2n "x"
+        y = s2n "y"
+        z = s2n "z"
         _gt a b = Var gt `App` a `App` b
         _eq a b = Var eq `App` a `App` b
         _exp a b = Var exp `App` a `App` b
         _evn a = Var evn `App` a
         _x = Var x
         _y = Var y
+        _z = Var z
         u = s2n "u"
         v = s2n "v"
         _u = Var u
         _v = Var v
-        _0 = Const 0
-        _1 = Const 1
-        _2 = Const 2
-        _3 = Const 3
-        _4 = Const 4
-        _5 = Const 5
+        [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
 
-e97 m = letS gt ( lamS x . lamS y $ Less _y _x ) $
-      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) _1 ) $
-      letS evn ( lamS x $ _x `_eq` Mult (Div _x _2) _2 ) $
-      letrecS exp ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
-                    If (Less _y _1) _1 $
-                    If (_evn _y)    (_dbl (_exp _x (Div _y _2))) $
-                                    _x `Mult` _exp _x (Plus _y (Const (-1)))  ) $
-      -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
-      _exp _u (Const m)
+
+-- >>> runFreshMT (eval 0 (e97 3))
+-- Brk (Plus (Plus (Plus (Const 1) (Mult (Var u) (Const 1))) (App (Lam (<z23> Mult (Var 0@0) (Var 0@0))) (Mult (Var u) (Const 1)))) (Mult (Var u) (App (Lam (<z50> Mult (Var 0@0) (Var 0@0))) (Mult (Var u) (Const 1)))))
+
+e97 n = letrec gt -- \x y . y < x
+             ( lam x . lam y $ _y `Less` _x ) $
+      letrec eq -- \x y . (x < y) + (gt x y) < 1
+             ( lam x . lam y $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
+      letrec evn -- \x . < \y . eq y <~y / 2 * 2> ) >
+             ( lam x $ _eq _x (Mult (Div _x _2) _2) ) $
+      letrec exp {- \x y -> if (y < 1)
+                              then < 1 >
+                              else if (evn y)
+                                then < (\x -> x*x) ~(exp x (y/2)) >
+                                else < x * ~(exp x (y + -1)) >
+                  -}
+             ( lam x . lam y $ -- x는 코드(문법트리) y는 그냥 값이 넘어오고
+                    If (Less _y _1) (Brk _1) $
+                    If (_evn _y)  (Brk (lam z (Mult _z _z) `App` Esc(_exp _x (Div _y _2)))) $
+                                   Brk (Esc _x `Mult` Esc(_exp _x (Plus _y (Const (-1))))) 
+                                              ) $
+      Brk ( foldl1 Plus [Esc(_exp (Brk _u) (Const i)) | i<-[0..n]] ) -- < ~(exp u 0) + ~(exp u 1) + ... + ~(exp u n) >
     where
         gt = s2n "gt"
         eq = s2n "eq"
-        dbl = s2n "dbl"
         exp = s2n "exp" -- 음수가 아닌 거듭제곱만 고려
         evn = s2n "evn" -- 음수가 아닌 거듭제곱만 고려
-        x = s2n "?x"
-        y = s2n "?y"
+        x = s2n "x"
+        y = s2n "y"
+        z = s2n "z"
         _gt a b = Var gt `App` a `App` b
         _eq a b = Var eq `App` a `App` b
         _exp a b = Var exp `App` a `App` b
         _evn a = Var evn `App` a
-        _dbl a = Var dbl `App` a
         _x = Var x
         _y = Var y
+        _z = Var z
         u = s2n "u"
         v = s2n "v"
         _u = Var u
         _v = Var v
-        _0 = Const 0
-        _1 = Const 1
-        _2 = Const 2
+        [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
 
-e96 vs n m = letS gt ( lamS x . lamS y $ Less _y _x ) $
-      letS eq ( lamS x . lamS y $ Less (Plus (Less _x _y) (_gt _x _y)) _1 ) $
-      letS evn ( lamS x $ _x `_eq` Mult (Div _x _2) _2 ) $
-      letrecS exp ( lamS x . lamS y $ -- y가 상수이면 재귀적으로 매크로 확장
-                    If (Less _y _1) _1 $
-                    If (_evn _y)    (_dbl (_exp _x (Div _y _2))) $
-                                    _x `Mult` _exp _x (Plus _y (Const (-1)))  ) $
-      -- mul을 이용해서 exp 확장해서 두단계로 확장되는 재귀적 매크로
-      foldl1 Plus [_exp (Var v) (Const m) | v<-vs]
-    where
-        gt = s2n "gt"
-        eq = s2n "eq"
-        dbl = s2n "dbl"
-        exp = s2n "exp" -- 음수가 아닌 거듭제곱만 고려
-        evn = s2n "evn" -- 음수가 아닌 거듭제곱만 고려
-        x = s2n "?x"
-        y = s2n "?y"
-        _gt a b = Var gt `App` a `App` b
-        _eq a b = Var eq `App` a `App` b
-        _exp a b = Var exp `App` a `App` b
-        _evn a = Var evn `App` a
-        _dbl a = Var dbl `App` a
-        _x = Var x
-        _y = Var y
-        _0 = Const 0
-        _1 = Const 1
-        _2 = Const 2
-
-
--- >>> runFreshM (expand [] e98)
--- Mult (Var u) (App (Lam (<?x18> Mult (Var 0@0) (Var 0@0))) (App (Lam (<?x26> Mult (Var 0@0) (Var 0@0))) (Var u)))
-
--- >>> runFreshM (expand [] (e97 6))
--- App (Var dbl) (Mult (Var u) (App (Var dbl) (Var u)))
 
 {-
 let a = 10
@@ -284,8 +271,6 @@ in F b a
 
 ===> let a = b * 2 in
      let b = a * 3
--}
-
 -}
 
 example1 = runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x"), fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "x")] ])
