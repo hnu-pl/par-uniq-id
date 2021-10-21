@@ -117,6 +117,70 @@ eval 0 (Run e)  = do
     eval 0 e'
 eval k (Run e)  = Run <$> eval k e
 
+ev k e  | k < 0    = fail $ show e++" at impossible (negative) level "++show k
+ev _ e@(Const n)   = return e
+ev 0 e@(Var x)     = fail $ show x++" at level 0"
+ev k e@(Var x)     = return e
+ev 0 (Plus e1 e2)  = do
+    [Const n1, Const n2] <- runParT undefined [ ev 0 e1,  ev 0 e2 ]
+    -- Const n1 <- ev 0 e1
+    -- Const n2 <- ev 0 e2
+    return $ Const (n1 + n2)
+ev 0 (Mult e1 e2)  = do
+    Const n1 <- ev 0 e1
+    Const n2 <- ev 0 e2
+    return $ Const (n1 * n2)
+ev 0 (Div e1 e2)  = do
+    Const n1 <- ev 0 e1
+    Const n2 <- ev 0 e2
+    return $ Const (n1 `div` n2)
+ev 0 (Less e1 e2)  = do
+    Const n1 <- ev 0 e1
+    Const n2 <- ev 0 e2
+    return $ Const (if n1 < n2 then 1 else 0)
+ev k (Plus e1 e2)  = Plus <$> ev k e1 <*> ev k e2
+ev k (Mult e1 e2)  = Mult <$> ev k e1 <*> ev k e2
+ev k (Div  e1 e2)  = Div  <$> ev k e1 <*> ev k e2
+ev k (Less e1 e2)  = Less <$> ev k e1 <*> ev k e2
+ev 0 (If e e1 e0)  = do
+    Const n <- ev 0 e
+    if n==0 then ev 0 e0 else ev 0 e1
+ev k (If e e1 e0)  = If <$> ev k e <*> ev k e1 <*> ev k e0
+ev 0 e@(Lam _)     = return e
+ev k e@(Lam b)     = do
+    (x,e) <- unbind b
+    e' <- ev k e
+    return $ Lam (bind x e')
+ev 0 (App e1 e2)   = do
+    Lam b <- ev 0 e1
+    e2' <- ev 0 e2
+    (x,e) <- unbind b
+    ev 0 $ subst x e2' e
+ev k (App e1 e2)  = App <$> ev k e1 <*> ev k e2
+ev 0 e@(LetRec b)  = do
+    (r,e2) <- unbind b
+    let (f,Embed e1) = unrec r
+    let e1' = subst f (LetRec (bind (rec(f, embed e1)) (Var f))) e1
+    ev 0 $ subst f e1' e2
+ev k e@(LetRec b)  = do
+    (r,e2) <- unbind b
+    let (f,Embed e1) = unrec r
+    e1' <- ev k e1
+    e2' <- ev k e2
+    return $ LetRec (bind (rec(f, embed e1')) e2')
+ev k (Brk e)  = Brk <$> ev (k+1) e
+ev 0 (Esc e)  = error $ show e++" cannot escape at level 0"
+ev 1 (Esc e)  = do
+    Brk e' <- ev 0 e
+    return e'
+ev k (Esc e)  = Esc <$> ev (k-1) e
+ev 0 (Run e)  = do
+    Brk e' <- ev 0 e
+    ev 0 e'
+ev k (Run e)  = Run <$> ev k e
+
+
+
 lam x = Lam . bind x
 letrec f body = LetRec . bind (rec (f, embed body))
 
