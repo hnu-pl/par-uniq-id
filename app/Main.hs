@@ -9,6 +9,7 @@ import Control.Parallel.Strategies
 import Control.Monad.Trans.State.Strict
 import Control.Monad
 import Control.Monad.Fail
+import Control.Monad.Trans.Identity
 import Data.List
 import System.Environment
 
@@ -18,6 +19,7 @@ import GHC.Generics ( Generic )
 import Data.Typeable ( Typeable )
 import Unbound.Generics.LocallyNameless
 import Unbound.Generics.LocallyNameless.Internal.Fold
+import Data.Functor.Identity (Identity(runIdentity))
 
 qsort [] = []
 qsort [y] = [y]
@@ -117,68 +119,76 @@ eval 0 (Run e)  = do
     eval 0 e'
 eval k (Run e)  = Run <$> eval k e
 
-ev k e  | k < 0    = fail $ show e++" at impossible (negative) level "++show k
-ev _ e@(Const n)   = return e
-ev 0 e@(Var x)     = fail $ show x++" at level 0"
-ev k e@(Var x)     = return e
-ev 0 (Plus e1 e2)  = do
-    [Const n1, Const n2] <- runParT undefined [ ev 0 e1,  ev 0 e2 ]
-    -- Const n1 <- ev 0 e1
-    -- Const n2 <- ev 0 e2
+instance MonadFail Identity where -- 그냥 Identity를 MonadFail로 만들면 됨 예전 방식이긴 하지만 ...
+    fail = error
+
+ev runM k e  | k < 0    = fail $ show e++" at impossible (negative) level "++show k
+ev runM _ e@(Const n)   = return e
+ev runM 0 e@(Var x)     = fail $ show x++" at level 0"
+ev runM k e@(Var x)     = return e
+ev runM 0 (Plus e1 e2)  = do
+    [Const n1, Const n2] <- runParT runM $ ev runM 0 <$> [e1, e2]
     return $ Const (n1 + n2)
-ev 0 (Mult e1 e2)  = do
-    Const n1 <- ev 0 e1
-    Const n2 <- ev 0 e2
+ev runM 0 (Mult e1 e2)  = do
+    [Const n1, Const n2] <- runParT runM $ ev runM 0 <$> [e1, e2]
     return $ Const (n1 * n2)
-ev 0 (Div e1 e2)  = do
-    Const n1 <- ev 0 e1
-    Const n2 <- ev 0 e2
+ev runM 0 (Div e1 e2)  = do
+    [Const n1, Const n2] <- runParT runM $ ev runM 0 <$> [e1, e2]
     return $ Const (n1 `div` n2)
-ev 0 (Less e1 e2)  = do
-    Const n1 <- ev 0 e1
-    Const n2 <- ev 0 e2
+ev runM 0 (Less e1 e2)  = do
+    [Const n1, Const n2] <- runParT runM $ ev runM 0 <$> [e1, e2]
     return $ Const (if n1 < n2 then 1 else 0)
-ev k (Plus e1 e2)  = Plus <$> ev k e1 <*> ev k e2
-ev k (Mult e1 e2)  = Mult <$> ev k e1 <*> ev k e2
-ev k (Div  e1 e2)  = Div  <$> ev k e1 <*> ev k e2
-ev k (Less e1 e2)  = Less <$> ev k e1 <*> ev k e2
-ev 0 (If e e1 e0)  = do
-    Const n <- ev 0 e
-    if n==0 then ev 0 e0 else ev 0 e1
-ev k (If e e1 e0)  = If <$> ev k e <*> ev k e1 <*> ev k e0
-ev 0 e@(Lam _)     = return e
-ev k e@(Lam b)     = do
+ev runM k (Plus e1 e2)  = do
+    [e1', e2'] <- runParT runM $ ev runM k <$> [e1, e2]
+    return $ Plus e1' e2'
+ev runM k (Mult e1 e2)  = do
+    [e1', e2'] <- runParT runM $ ev runM k <$> [e1, e2]
+    return $ Mult e1' e2'
+ev runM k (Div  e1 e2)  = do
+    [e1', e2'] <- runPar $ ev runM k <$> [e1, e2]
+    return $ Div  e1' e2'
+ev runM k (Less e1 e2)  = do
+    [e1', e2'] <- runPar $ ev runM k <$> [e1, e2]
+    return $ Less e1' e2'
+ev runM 0 (If e e1 e0)  = do
+    Const n <- ev runM 0 e
+    if n==0 then ev runM 0 e0 else ev runM 0 e1
+ev runM k (If e e1 e0)  = do
+    [e', e1', e0'] <- runPar $ ev runM k <$> [e0, e1, e0]
+    return $ If e' e1' e0'
+ev runM 0 e@(Lam _)     = return e
+ev runM k e@(Lam b)     = do
     (x,e) <- unbind b
-    e' <- ev k e
+    e' <- ev runM k e
     return $ Lam (bind x e')
-ev 0 (App e1 e2)   = do
-    Lam b <- ev 0 e1
-    e2' <- ev 0 e2
+ev runM 0 (App e1 e2)   = do
+    Lam b <- ev runM 0 e1
+    e2' <- ev runM 0 e2
     (x,e) <- unbind b
-    ev 0 $ subst x e2' e
-ev k (App e1 e2)  = App <$> ev k e1 <*> ev k e2
-ev 0 e@(LetRec b)  = do
+    ev runM 0 $ subst x e2' e
+ev runM k (App e1 e2)  = do
+    [e1', e2'] <- runPar $ ev runM k <$> [e1, e2]
+    return $ App e1' e2'
+ev runM 0 e@(LetRec b)  = do
     (r,e2) <- unbind b
     let (f,Embed e1) = unrec r
     let e1' = subst f (LetRec (bind (rec(f, embed e1)) (Var f))) e1
-    ev 0 $ subst f e1' e2
-ev k e@(LetRec b)  = do
+    ev runM 0 $ subst f e1' e2
+ev runM k e@(LetRec b)  = do
     (r,e2) <- unbind b
     let (f,Embed e1) = unrec r
-    e1' <- ev k e1
-    e2' <- ev k e2
+    [e1', e2'] <- runPar $ ev runM k <$> [e1, e2]
     return $ LetRec (bind (rec(f, embed e1')) e2')
-ev k (Brk e)  = Brk <$> ev (k+1) e
-ev 0 (Esc e)  = error $ show e++" cannot escape at level 0"
-ev 1 (Esc e)  = do
-    Brk e' <- ev 0 e
+ev runM k (Brk e)  = Brk <$> ev runM (k+1) e
+ev runM 0 (Esc e)  = error $ show e++" cannot escape at level 0"
+ev runM 1 (Esc e)  = do
+    Brk e' <- ev runM 0 e
     return e'
-ev k (Esc e)  = Esc <$> ev (k-1) e
-ev 0 (Run e)  = do
-    Brk e' <- ev 0 e
-    ev 0 e'
-ev k (Run e)  = Run <$> ev k e
-
+ev runM k (Esc e)  = Esc <$> ev runM (k-1) e
+ev runM 0 (Run e)  = do
+    Brk e' <- ev runM 0 e
+    ev runM 0 e'
+ev runM k (Run e)  = Run <$> ev runM k e
 
 
 lam x = Lam . bind x
@@ -233,6 +243,12 @@ e99 = letrec gt -- \x y . < ~y < ~x >
 
 
 -- >>> runFreshMT (eval 0 e99)
+-- Const 0
+
+-- >>> runFreshMT (ev runIdentity 0 e99)
+-- Identity (Const 0)
+
+-- >>> runIdentity $ runFreshMT (ev runIdentity 0 e99)
 -- Const 0
 
 
