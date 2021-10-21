@@ -358,12 +358,16 @@ example1 = runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "
 bench1 :: Int -> Int -> [Name a]
 bench1 n m = runFreshM . runPar $ replicate n (foldl1 (>>) $ replicate m (fresh(s2n "x")))
 
-{-
--- x1^m + x2^m + ... + xn^m
-bench2 n m = runFreshM $ do
-    vs <- replicateM (fromIntegral n) (fresh $ s2n "v")
-    expand [] (e96 vs n m)
--}
+-- x1^m + x2^m + ... + xn^m 확장/실행, x=2로
+bench2 n = runFreshM $ eval 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
+    where
+        u = s2n "u"
+
+-- x1^m + x2^m + ... + xn^m 병렬 확장/실행, x=2로 
+bench3 n = runM . runFreshMT $ ev runM 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
+    where
+        u = s2n "u"
+        runM = runIdentity
 
 main = do
     a0:a1:a2:_ <- getArgs
@@ -374,14 +378,12 @@ main = do
         1 -> do
             putStrLn $ " bench1 "++show n++" "++show m
             print $ bench1 (fromIntegral n) (fromIntegral m)
-{-}
         2 -> do
-            putStrLn $ " bench2 "++show n++" "++show m
-            let e2 = bench2 n m -- u^(n^m) 을 expand
-            print $ length (toListOf fv e2 :: [Nm]) -- u^(n^m) 을 expand
--}
-
-
+            putStrLn $ " bench2 "++show n
+            print $ bench2 n
+        3 -> do
+            putStrLn $ " bench3 "++show n
+            print $ bench3 n
 
 {-
 newIdMVar :: MVar Int -> IO Int
@@ -414,3 +416,66 @@ stack run -- 2 8 100000 +RTS -s -N7
 stack run -- 2 8 100000 +RTS -s -N8
 -}
 
+{-
+
+kyagrd@kyalu:~/github/hnu-pl/par-uniq-id$ stack run -- 2 2000 0 +RTS -s -N4
+ bench2 2000
+Const 229626139054850904846566640235536396804463540417739040095528547365153252278474062771331897263301253983689192927797492554689423792172611066285186271233330637078259978290624560001377558296480089742857853980126972489563230927292776727894634052080932707941809993116324797617889259211246623299072328443940665362688337817968917011204758969615828117801869553000858005433413251661044016264472562583522535766634413197990792836254043559716808084319706366503081778867804183841109915567179344078320163914433261165510760851167452031056697572838864109017830551567765250350871057601645685541635930907524369702298058751
+   8,167,155,648 bytes allocated in the heap
+     146,417,504 bytes copied during GC
+       7,123,640 bytes maximum residency (15 sample(s))
+         373,320 bytes maximum slop
+               6 MB total memory in use (0 MB lost due to fragmentation)
+
+                                     Tot time (elapsed)  Avg pause  Max pause
+  Gen  0      7770 colls,  7770 par    1.052s   0.197s     0.0000s    0.0004s
+  Gen  1        15 colls,    14 par    0.051s   0.015s     0.0010s    0.0019s
+
+  Parallel GC work balance: 27.41% (serial 0%, perfect 100%)
+
+  TASKS: 10 (1 bound, 9 peak workers (9 total), using -N4)
+
+  SPARKS: 0 (0 converted, 0 overflowed, 0 dud, 0 GC'd, 0 fizzled)
+
+  INIT    time    0.001s  (  0.000s elapsed)
+  MUT     time    1.224s  (  1.351s elapsed)
+  GC      time    1.103s  (  0.212s elapsed)
+  EXIT    time    0.001s  (  0.007s elapsed)
+  Total   time    2.328s  (  1.570s elapsed)
+
+  Alloc rate    6,672,387,404 bytes per MUT second
+
+  Productivity  52.6% of total user, 86.0% of total elapsed
+
+kyagrd@kyalu:~/github/hnu-pl/par-uniq-id$ stack run -- 3 2000 0 +RTS -s -N4
+ bench3 2000
+Const 229626139054850904846566640235536396804463540417739040095528547365153252278474062771331897263301253983689192927797492554689423792172611066285186271233330637078259978290624560001377558296480089742857853980126972489563230927292776727894634052080932707941809993116324797617889259211246623299072328443940665362688337817968917011204758969615828117801869553000858005433413251661044016264472562583522535766634413197990792836254043559716808084319706366503081778867804183841109915567179344078320163914433261165510760851167452031056697572838864109017830551567765250350871057601645685541635930907524369702298058751
+   9,463,963,616 bytes allocated in the heap
+     400,410,504 bytes copied during GC
+      19,385,728 bytes maximum residency (18 sample(s))
+         492,160 bytes maximum slop
+              18 MB total memory in use (0 MB lost due to fragmentation)
+
+                                     Tot time (elapsed)  Avg pause  Max pause
+  Gen  0      2360 colls,  2360 par    1.623s   0.178s     0.0001s    0.0008s
+  Gen  1        18 colls,    17 par    0.142s   0.038s     0.0021s    0.0045s
+
+  Parallel GC work balance: 89.01% (serial 0%, perfect 100%)
+
+  TASKS: 10 (1 bound, 9 peak workers (9 total), using -N4)
+
+  SPARKS: 2010517 (67243 converted, 351330 overflowed, 0 dud, 299032 GC'd, 1292912 fizzled)
+
+  INIT    time    0.001s  (  0.000s elapsed)
+  MUT     time    0.654s  (  0.406s elapsed)
+  GC      time    1.764s  (  0.217s elapsed)
+  EXIT    time    0.000s  (  0.008s elapsed)
+  Total   time    2.419s  (  0.630s elapsed)
+
+  Alloc rate    14,475,319,082 bytes per MUT second
+
+  Productivity  27.0% of total user, 64.3% of total elapsed
+
+
+
+-}
