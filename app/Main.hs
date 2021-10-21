@@ -373,7 +373,7 @@ main = do
     a0:a1:a2:_ <- getArgs
     let k = read a0 :: Int
         n = read a1 :: Integer
-        m = read a2 :: Integer
+        m = read a2 :: Integer -- bench2, bench3에서는 쓰지 않지만 안넘기면 에러니까 그냥 0같은 거 넘겨면됨
     case k of
         1 -> do
             putStrLn $ " bench1 "++show n++" "++show m
