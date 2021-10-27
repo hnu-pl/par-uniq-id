@@ -78,7 +78,10 @@ eval 0 (Less e1 e2)  = do
     Const n1 <- eval 0 e1
     Const n2 <- eval 0 e2
     return $ Const (if n1 < n2 then 1 else 0)
-eval k (Plus e1 e2)  = Plus <$> eval k e1 <*> eval k e2
+eval k (Plus e1 e2)  = do
+    e1' <- eval k e1
+    e2' <- eval k e2
+    return $ Plus e1' e2'
 eval k (Mult e1 e2)  = Mult <$> eval k e1 <*> eval k e2
 eval k (Div  e1 e2)  = Div  <$> eval k e1 <*> eval k e2
 eval k (Less e1 e2)  = Less <$> eval k e1 <*> eval k e2
@@ -358,12 +361,12 @@ example1 = runPar (sequence <$> [ [fresh(s2n "x")], [fresh(s2n "x"), fresh(s2n "
 bench1 :: Int -> Int -> [Name a]
 bench1 n m = runFreshM . runPar $ replicate n (foldl1 (>>) $ replicate m (fresh(s2n "x")))
 
--- x1^m + x2^m + ... + xn^m 확장/실행, x=2로
+-- x^0 + x^1 + x^2 + ... + x^n 확장/실행, x=2로
 bench2 n = runFreshM $ eval 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
     where
         u = s2n "u"
 
--- x1^m + x2^m + ... + xn^m 병렬 확장/실행, x=2로 
+-- x^0 + x^1 + x^2 + ... + x^n 병렬 확장/실행, x=2로
 bench3 n = runM . runFreshMT $ ev runM 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
     where
         u = s2n "u"
