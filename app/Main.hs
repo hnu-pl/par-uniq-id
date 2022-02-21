@@ -342,6 +342,41 @@ e97 n = letrec gt -- \x y . y < x
         _v = Var v
         [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
 
+e96 n = letrec gt -- \x y . y < x
+             ( lam x . lam y $ _y `Less` _x ) $
+        letrec eq -- \x y . (x < y) + (gt x y) < 1
+             ( lam x . lam y $ Less (Less _x _y `Plus` _gt _x _y) _1 ) $
+        letrec fib {- \x y -> if (y == 1)
+                        then < 1 >
+                        else if (y == 0)
+                            then < 0 >
+                            else < ~(fib (y-1)) + ~(fib (y-2)) >
+                    -}
+             ( lam x. lam y $
+                    If (_eq _y _2 ) (Brk _1) $
+                    If (_eq _y _1 ) (Brk _1) $
+                    If (_eq _y _0 ) (Brk _0) $
+                                     Brk ( Esc(_fib _x (Plus _y  (Const (-1)))) `Plus` Esc(_fib _x (Plus _y (Const (-2))) ))
+                                     ) $ 
+        Brk (foldl1 Plus [Esc(_fib (Brk _u) (Const i)) | i<-[0..n]])
+    where
+        gt = s2n "gt"
+        eq = s2n "eq"
+        fib = s2n "fib" -- 음수가 아닌 거듭제곱만 고려
+        x = s2n "x"
+        y = s2n "y"
+        _gt a b = Var gt `App` a `App` b
+        _eq a b = Var eq `App` a `App` b
+        _fib a b = Var fib `App` a `App` b
+        _x = Var x
+        _y = Var y
+        u = s2n "u"
+        v = s2n "v"
+        _u = Var u
+        _v = Var v
+        [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]                    
+                    
+            
 
 {-
 let a = 10
@@ -366,11 +401,23 @@ bench2 n = runFreshM $ eval 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
     where
         u = s2n "u"
 
+-- fib test
+bench22 n = runFreshM $ eval 0 (Run . Brk $ lam u (Esc $ e96 n) `App` Const 0)
+    where
+        u = s2n "u"
+
 -- x^0 + x^1 + x^2 + ... + x^n 병렬 확장/실행, x=2로
 bench3 n = runM . runFreshMT $ ev runM 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
     where
         u = s2n "u"
         runM = runIdentity
+
+
+bench32 n = runM . runFreshMT $ ev runM 0 (Run . Brk $ lam u (Esc $ e96 n) `App` Const 0)
+    where
+        u = s2n "u"
+        runM = runIdentity        
+
 
 main = do
     a0:a1:a2:_ <- getArgs
@@ -387,6 +434,12 @@ main = do
         3 -> do
             putStrLn $ " bench3 "++show n
             print $ bench3 n
+        22 -> do
+            putStrLn $ " bench22 "++show n
+            print $ bench22 n
+        32 -> do
+            putStrLn $ " bench32 "++show n
+            print $ bench22 n
 
 {-
 newIdMVar :: MVar Int -> IO Int
