@@ -453,10 +453,10 @@ bench2 n = runFreshM $ eval 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
     where
         u = s2n "u"
 
-bench20 n = runFreshM $ eval 0 (lam u (e970 n) `App` Const 2)
+bench20 n = runFreshM $ eval 0 (lam u (e970 n) `App` Const 2) -- 미리 매크로 확장된 exp
     where
         u = s2n "u"
-bench21 n = runFreshM $ eval 0 (lam u (e971 n) `App` Const 2)
+bench21 n = runFreshM $ eval 0 (lam u (e971 n) `App` Const 2) -- 단순무식하게 n번 곱하는 방식으로 거듭제곱
     where
         u = s2n "u"
 
