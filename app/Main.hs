@@ -274,7 +274,7 @@ e98 = letrec gt -- \x y . y < x
                   -}
              ( lam x . lam y $ -- x는 코드(문법트리) y는 그냥 값이 넘어오고
                     If (Less _y _1) (Brk _1) $
-                    If (_evn _y)  (Brk (lam z (Mult _z _z) `App` Esc(_exp _x (Div _y _2)))) $
+                    If (_evn _y)  (Brk (lam z (Mult _z _z) `App` Esc(_exp _x (Div _y _2))))
                                   (Brk (Esc _x `Mult` Esc(_exp _x (Plus _y (Const (-1))))))
                                               ) $
       _exp (Brk _u) _5
@@ -317,8 +317,8 @@ e97 n = letrec gt -- \x y . y < x
                   -}
              ( lam x . lam y $ -- x는 코드(문법트리) y는 그냥 값이 넘어오고
                     If (Less _y _1) (Brk _1) $
-                    If (_evn _y)  (Brk (lam z (Mult _z _z) `App` Esc(_exp _x (Div _y _2)))) $
-                                   Brk (Esc _x `Mult` Esc(_exp _x (Plus _y (Const (-1))))) 
+                    If (_evn _y)  (Brk (lam z (Mult _z _z) `App` Esc(_exp _x (Div _y _2))))
+                                  (Brk (Esc _x `Mult` Esc(_exp _x (Plus _y (Const (-1))))))
                                               ) $
       Brk ( foldl1 Plus [Esc(_exp (Brk _u) (Const i)) | i<-[0..n]] ) -- < ~(exp u 0) + ~(exp u 1) + ... + ~(exp u n) >
     where
@@ -341,6 +341,58 @@ e97 n = letrec gt -- \x y . y < x
         _u = Var u
         _v = Var v
         [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
+
+e970 n = foldl1 Plus [myexp _u i | i<-[0..n::Integer]] -- exp u 0 + exp u 1 + ... + exp u n
+    where
+        myexp u i | i < 1     = _1
+        myexp u i | even i    = lam z (Mult _z _z) `App` myexp u (i `div` 2)
+                  | otherwise = u `Mult` myexp u (i-1)
+        u = s2n "u"
+        v = s2n "v"
+        z = s2n "z"
+        _u = Var u
+        _v = Var v
+        _z = Var z
+        [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
+
+e971 n = foldl1 Plus [myexp _u (fromIntegral i) | i<-[0..n::Integer]] -- exp u 0 + exp u 1 + ... + exp u n
+    where
+        myexp e i | i < 1     = _1
+        myexp e i             = foldl1 Mult $ replicate i e
+        u = s2n "u"
+        v = s2n "v"
+        z = s2n "z"
+        _u = Var u
+        _v = Var v
+        _z = Var z
+        [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
+
+
+e9700 n = foldl1 Plus [myexp (Const 2) i | i<-[0..n::Integer]] -- exp u 0 + exp u 1 + ... + exp u n
+    where
+        myexp e i | i < 1     = _1
+        myexp e i | even i    = lam z (Mult _z _z) `App` myexp e (i `div` 2)
+                  | otherwise = e `Mult` myexp e (i-1)
+        u = s2n "u"
+        v = s2n "v"
+        z = s2n "z"
+        _u = Var u
+        _v = Var v
+        _z = Var z
+        [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
+
+e9701 n = foldl1 Plus [myexp (Const 2) (fromIntegral i) | i<-[0..n::Integer]] -- exp u 0 + exp u 1 + ... + exp u n
+    where
+        myexp e i | i < 1     = _1
+        myexp e i             = foldl1 Mult $ replicate i e
+        u = s2n "u"
+        v = s2n "v"
+        z = s2n "z"
+        _u = Var u
+        _v = Var v
+        _z = Var z
+        [_0,_1,_2,_3,_4,_5] = Const <$> [0..5]
+
 
 e96 n = letrec gt -- \x y . y < x
              ( lam x . lam y $ _y `Less` _x ) $
@@ -401,6 +453,18 @@ bench2 n = runFreshM $ eval 0 (Run . Brk $ lam u (Esc $ e97 n) `App` Const 2)
     where
         u = s2n "u"
 
+bench20 n = runFreshM $ eval 0 (lam u (e970 n) `App` Const 2)
+    where
+        u = s2n "u"
+bench21 n = runFreshM $ eval 0 (lam u (e971 n) `App` Const 2)
+    where
+        u = s2n "u"
+
+bench200 n = runFreshM $ eval 0 (e9700 n) -- u를 2로 미리 치환한
+bench201 n = runFreshM $ eval 0 (e9701 n)
+
+
+
 -- fib test
 bench22 n = runFreshM $ eval 0 (Run . Brk $ lam u (Esc $ e96 n) `App` Const 0)
     where
@@ -434,6 +498,19 @@ main = do
         3 -> do
             putStrLn $ " bench3 "++show n
             print $ bench3 n
+        20 -> do
+            putStrLn $ " bench20 "++show n
+            print $ bench20 n
+        200 -> do
+            putStrLn $ " bench200 "++show n
+            print $ bench200 n
+        21 -> do
+            putStrLn $ " bench21 "++show n
+            print $ bench21 n
+        201 -> do
+            putStrLn $ " bench201 "++show n
+            print $ bench201 n
+
         22 -> do
             putStrLn $ " bench22 "++show n
             print $ bench22 n
